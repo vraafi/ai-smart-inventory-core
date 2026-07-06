@@ -13,7 +13,8 @@ function debugLog(msg) {
       sheet = ss.insertSheet("DebugLogs");
       sheet.appendRow(["Timestamp", "Message"]);
     }
-    sheet.appendRow([new Date(), typeof msg === 'object' ? JSON.stringify(msg) : msg]);
+    sheet.insertRowBefore(2);
+    sheet.getRange("A2:B2").setValues([[new Date(), typeof msg === 'object' ? JSON.stringify(msg) : msg]]);
   } catch(e) {
     Logger.log("debugLog error: " + e);
   }
@@ -48,6 +49,14 @@ function doPost(e) {
 
     // ── Telegram webhook ──
     if (body.update_id) {
+      const updateIdStr = body.update_id.toString();
+      const cache = CacheService.getScriptCache();
+      if (cache.get("TG_UPDATE_" + updateIdStr)) {
+        debugLog("Duplicate TG Update ID ignored: " + updateIdStr);
+        return HtmlService.createHtmlOutput("OK");
+      }
+      cache.put("TG_UPDATE_" + updateIdStr, "1", 3600); // Store for 1 hour
+
       const msg = body.message;
       if (msg) {
         const chatId = msg.chat.id.toString();
@@ -56,22 +65,23 @@ function doPost(e) {
         const name   = [from.first_name, from.last_name].filter(Boolean).join(" ") || from.username || "Employee";
         
         // Save first person who chats as ADMIN automatically for push notifications
-        if (text) {
+        if (text || msg.document) {
           const existingAdmin = props.getProperty("ADMIN_CHAT_ID");
           if (!existingAdmin) {
             props.setProperty("ADMIN_CHAT_ID", chatId);
             debugLog("Saved new ADMIN_CHAT_ID: " + chatId);
           }
-          debugLog("Processing TG Message from " + name + ": " + text);
-          _processTelegramMessage(chatId, text, name);
+          debugLog("Processing TG Message from " + name + (msg.document ? " [Document attached]" : "") + ": " + text);
+          _processTelegramMessage(chatId, text, name, msg.document);
         }
       }
     }
   } catch (err) {
     Logger.log("doPost error: " + err);
-    return ContentService.createTextOutput("ERROR: " + err + " | " + err.stack);
+    debugLog("doPost error: " + err + " | " + err.stack);
+    return HtmlService.createHtmlOutput("ERROR: " + err);
   }
-  return ContentService.createTextOutput("OK");
+  return HtmlService.createHtmlOutput("OK");
 }
 
 // ─── WHATSAPP MESSAGE HANDLER ──────────────────────────────
@@ -95,23 +105,49 @@ function _processWhatsAppMessage(phone, text, senderName) {
 }
 
 // ─── TELEGRAM MESSAGE HANDLER ────────────────────────────────
-function _processTelegramMessage(chatId, text, senderName) {
-  if (text === "/start" || text === "/help") {
+function _processTelegramMessage(chatId, text, senderName, document) {
+  let finalContext = text || "";
+  
+  if (document) {
+    _sendTelegram(chatId, "⏳ Membaca dokumen Excel/CSV...");
+    try {
+      const props = PropertiesService.getScriptProperties();
+      const token = props.getProperty("TG_TOKEN");
+      const fileResp = UrlFetchApp.fetch(`https://api.telegram.org/bot${token}/getFile?file_id=${document.file_id}`);
+      const fileData = JSON.parse(fileResp.getContentText());
+      if (fileData.ok) {
+        const filePath = fileData.result.file_path;
+        const fileUrl = `https://api.telegram.org/file/bot${token}/${filePath}`;
+        const blobResp = UrlFetchApp.fetch(fileUrl);
+        let blob = blobResp.getBlob();
+        blob.setName(document.file_name || "document");
+        blob.setContentType(document.mime_type || "");
+        
+        const extractedText = _extractTextFromBlob(blob);
+        finalContext += `\n\n[FILE ATTACHMENT CONTENT: ${document.file_name}]\n` + extractedText;
+      }
+    } catch(e) {
+      _sendTelegram(chatId, "❌ Gagal mengekstrak dokumen: " + e.message);
+      return;
+    }
+  }
+
+  if (finalContext === "/start" || finalContext === "/help") {
     _sendTelegram(chatId, _buildWelcomeMessage(senderName));
     return;
   }
-  if (text === "/status" || text === "/dashboard") {
+  if (finalContext === "/status" || finalContext === "/dashboard") {
     _sendAgentMsg("telegram", chatId, _buildDashboardSummary());
     return;
   }
-  if (text.startsWith("/check") || text.startsWith("/stock")) {
-    const q = text.replace(/\/(check|stock)\s*/i, "").trim();
+  if (finalContext.startsWith("/check") || finalContext.startsWith("/stock")) {
+    const q = finalContext.replace(/\/(check|stock)\s*/i, "").trim();
     _sendAgentMsg("telegram", chatId, _buildStockCheckResult(q));
     return;
   }
   // Natural language — process with AI
   _sendTelegram(chatId, "⏳ AI is processing your report...");
-  _processWithAI(chatId, text, senderName, "Telegram");
+  _processWithAI(chatId, finalContext, senderName, "Telegram");
 }
 
 // ─── WHATSAPP POLLING (backup if webhook fails) ──────────────
@@ -140,10 +176,10 @@ function pollTelegram() {
         const text   = msg.text || "";
         const from   = msg.from;
         const name   = [from.first_name, from.last_name].filter(Boolean).join(" ") || "Employee";
-        if (text) {
-          debugLog("Processing TG Message from " + name + ": " + text);
+        if (text || msg.document) {
+          debugLog("Processing TG Message from " + name + (msg.document ? " [Document attached]" : "") + ": " + text);
           try {
-            _processTelegramMessage(chatId, text, name);
+            _processTelegramMessage(chatId, text, name, msg.document);
           } catch(e) {
             debugLog("Error processing msg: " + e);
           }
@@ -157,14 +193,30 @@ function pollTelegram() {
 
 // ─── EMAIL POLLING ────────────────────────────────────────────
 function pollEmails() {
+  debugLog("pollEmails trigger fired!");
   try {
-    const code = "AI Inventory Report";
-    // Search for unread emails that have the subject code
-    const threads = GmailApp.search(`is:unread subject:"${code}"`, 0, 10);
+    const threads = GmailApp.search(`is:unread in:anywhere (subject:"Nexus AI Report" OR subject:"AI Inventory Notification" OR subject:"Inventory" OR subject:"Update")`, 0, 5);
+    const props = PropertiesService.getScriptProperties();
+    let processed = props.getProperty("PROCESSED_EMAILS") || "";
+    
+    debugLog(`Found ${threads.length} unread threads matching query.`);
     
     threads.forEach(thread => {
       thread.getMessages().forEach(msg => {
-        if (!msg.isUnread()) return;
+        if (!msg.isUnread()) {
+          // debugLog(`Skipping message ${msg.getId()} because it is already read.`);
+          return;
+        }
+        const msgId = msg.getId();
+        
+        // Skip if we already processed this exact email message
+        if (processed.includes(msgId)) {
+          debugLog(`Skipping message ${msgId} because it is in PROCESSED_EMAILS.`);
+          return;
+        }
+        
+        debugLog(`Processing NEW UNREAD message: ${msgId}`);
+        
         const subject   = msg.getSubject();
         const rawBody   = msg.getPlainBody().substring(0, 1500);
         const from      = msg.getFrom();
@@ -172,10 +224,33 @@ function pollEmails() {
         const senderEmail = (from.match(/<(.+)>/) || [, from])[1];
         
         // Combine Subject and Body for AI Context
-        const fullContext = `Subject: ${subject}\n\nBody: ${rawBody}`;
+        let fullContext = `Subject: ${subject}\n\nBody: ${rawBody}`;
+
+        // Extract Attachments
+        const attachments = msg.getAttachments();
+        if (attachments.length > 0) {
+          try {
+             for (let i = 0; i < attachments.length; i++) {
+                const mime = attachments[i].getContentType();
+                const name = attachments[i].getName().toLowerCase();
+                if (name.endsWith(".csv") || name.endsWith(".xlsx") || mime.includes("csv") || mime.includes("spreadsheetml") || mime.includes("excel")) {
+                    let extractedText = _extractTextFromBlob(attachments[i]);
+                    if (extractedText) {
+                       fullContext += `\n\n[FILE ATTACHMENT CONTENT: ${attachments[i].getName()}]\n` + extractedText;
+                    }
+                }
+             }
+          } catch(e) {
+             debugLog("Failed to extract email attachments: " + e.message);
+          }
+        }
 
         // Process with AI and pass the senderEmail so it can reply
         _processWithAI(senderEmail, fullContext, senderName, "Email");
+        
+        // Mark as processed using PropertiesService and also mark Read in Gmail for hygiene
+        processed += "," + msgId;
+        props.setProperty("PROCESSED_EMAILS", processed.slice(-8000));
         msg.markRead();
       });
     });
@@ -188,12 +263,13 @@ function _processWithAI(chatId, rawText, senderName, source) {
   const wipeStateKey = "WIPE_STATE_" + chatId;
 
   // 1. If user sends /wipe command
-  if (rawText.trim().toLowerCase().startsWith("/wipe")) {
+  if (rawText.toLowerCase().includes("/wipe")) {
     _sendAgentMsg(source, chatId, "⏳ AI is analyzing your destructive request...");
     
+    const sheetNames = SpreadsheetApp.getActiveSpreadsheet().getSheets().map(s => s.getName()).join(", ");
     const wipePrompt = `You are a destructive AI Action Engine for a Google Sheets Inventory System.
 The user wants to wipe/delete data or structure: "${rawText}".
-We have 4 main sheets: Dashboard, Inventory, Transactions, Branches.
+We have the following sheets in our system: ${sheetNames}. Do not invent sheet names that are not in this list. Use exact names!
 
 Generate exactly 4 options (a, b, c, d) for the user to confirm. 
 Option 'a' MUST be the exact destructive action they requested.
@@ -217,32 +293,49 @@ Return ONLY a valid JSON object exactly like this:
   }
 }`;
     
-    let aiRaw = callAI(wipePrompt, "You are a Google Apps Script JSON generator.");
+    let aiRaw = "";
+    try {
+      aiRaw = callAI(wipePrompt, "You are a Google Apps Script JSON generator.");
+    } catch (err) {
+      _sendAgentMsg(source, chatId, "❌ AI System Error: " + err.message + "\n\nPlease check your API key or Tunnel connection in the Settings menu.");
+      return;
+    }
+    
     const jsonMatch = aiRaw.match(/\{[\s\S]*\}/);
     if (jsonMatch) {
       try {
         let parsed = JSON.parse(jsonMatch[0]);
-        cache.put(wipeStateKey, JSON.stringify(parsed.actions), 300); // Wait for 5 minutes
+        PropertiesService.getScriptProperties().setProperty(wipeStateKey, JSON.stringify(parsed.actions));
         _sendAgentMsg(source, chatId, parsed.message);
       } catch (e) {
         _sendAgentMsg(source, chatId, "❌ AI failed to formulate an action. Please try another instruction.");
       }
       return;
+    } else {
+      _sendAgentMsg(source, chatId, "❌ AI returned an invalid response:\n\n" + aiRaw);
+      return;
     }
   }
 
   // 2. If user is in WIPE_PENDING state
-  const pendingWipeStr = cache.get(wipeStateKey);
+  const pendingWipeStr = PropertiesService.getScriptProperties().getProperty(wipeStateKey);
+  debugLog("WIPE_STATE for " + wipeStateKey + " is: " + pendingWipeStr);
   if (pendingWipeStr) {
-    const ans = rawText.trim().toLowerCase();
+    let cleanText = rawText;
+    if (cleanText.includes("Body: ")) {
+      cleanText = cleanText.split("Body: ").pop();
+    } else if (cleanText.includes("Body:")) {
+      cleanText = cleanText.split("Body:").pop();
+    }
+    const ans = cleanText.trim().toLowerCase();
     
     if (ans === "d") {
-      cache.remove(wipeStateKey);
+      PropertiesService.getScriptProperties().deleteProperty(wipeStateKey);
       _sendAgentMsg(source, chatId, "✅ Wipe process **cancelled**.");
       return;
     }
     if (ans === "c") {
-      cache.remove(wipeStateKey);
+      PropertiesService.getScriptProperties().deleteProperty(wipeStateKey);
       _sendAgentMsg(source, chatId, "🔄 State reset. Please send a new /wipe command with your specific instructions.");
       return;
     }
@@ -251,7 +344,7 @@ Return ONLY a valid JSON object exactly like this:
     try { actionsObj = JSON.parse(pendingWipeStr); } catch(e) {}
     
     if (actionsObj && (ans === "a" || ans === "b")) {
-      cache.remove(wipeStateKey);
+      PropertiesService.getScriptProperties().deleteProperty(wipeStateKey);
       const actionArr = actionsObj[ans];
       if (!actionArr || !Array.isArray(actionArr)) {
          _sendAgentMsg(source, chatId, "❌ Opsi tidak memiliki aksi yang valid.");
@@ -280,39 +373,48 @@ ${sanitizedText}
 AVAILABLE ITEMS (SKU | Name | Category | CurrentStock):
 ${itemContext}
 
-RULES:
-1. Match items by EXACT NAME. "Dell Latitude 5430" must match "Dell Latitude 5430", NOT "ThinkPad" or any other item.
-2. "MacBook Pro 14 M2" must match "MacBook Pro 14 M2", NOT "ThinkPad T14" or similar.  
-3. "Mouse Logitech K380" or "Logitech K380" must match "Logitech K380", NOT any laptop.
-4. If the message contains "/onboarding" and no exact match exists, set item_new=true, item_code="NEW", and extract new_item_name, new_category, new_price. If the message does NOT contain "/onboarding", NEVER set item_new=true; instead, assume it is a typo and match it to the closest existing item.
-5. Use the SKU code from the AVAILABLE ITEMS list above as item_code (e.g. "LAP-003", "ACC-002").
-6. Transaction types:
-   - "IN" = receiving/restocking (kedatangan, masuk gudang, terima dari supplier)
-   - "OUT" = selling/dispatching (laku, terjual, kirim, dibawa kurir)
-   - "OUT" = returns/retur where customer returns defective item AND user says reduce stock (dikurangi)
+RULES (CRITICAL - FOLLOW EXACTLY):
+1. **ONBOARDING PRIORITY**: If the text contains the word "/onboarding", you are processing a NEW ITEM REGISTRATION. You MUST IMMEDIATELY set:
+   - "type": "IN"
+   - "item_code": "NEW"
+   - "item_new": true
+   - "quantity": 0
+   - "new_item_name": (extract from text)
+   - "new_category": (extract from text, default "General")
+   - "new_price": (extract from text, default 0)
+   Do NOT attempt to match existing items. Ignore all other rules.
+
+2. MATCH EXACTLY: "Dell Latitude 5430" must match "Dell Latitude 5430", NOT "ThinkPad". "Logitech K380" must match "Logitech K380", not any laptop.
+3. If the text does NOT contain "/onboarding", you MUST set "item_new": false.
+4. Transaction types:
+   - "IN" = receiving/restocking OR adding new product via /onboarding
+   - "OUT" = selling/dispatching/returns (laku, terjual, kirim, dibawa kurir, retur)
    - "ADJUSTMENT" = physical count correction ONLY (e.g. "stok fisik = 50 unit")
    - "CHECK" = stock inquiry
    - "UNKNOWN" = unrelated to inventory
 7. quantity must always be a positive number.
 8. Each separate item in the report = separate transaction object.
+9. If the user mentions an item (e.g. "Titanium Black") and there are MULTIPLE items with the same name but different specifications (e.g. 256GB vs 512GB), you MUST set item_code="AMBIGUOUS" and write a short question in 'notes' asking the user to clarify AND explicitly instructing them to re-write their full command (e.g. "Varian mana yang dimaksud? 256GB atau 512GB? Mohon balas dengan perintah lengkap, contoh: Laku 1 unit S24 Ultra Titanium Black 256GB"). Do not guess.
 
-Respond ONLY with a JSON array. No other text:
-[
-  {
-    "type": "IN|OUT|ADJUSTMENT|CHECK|UNKNOWN",
-    "item_code": "exact SKU from list above or NEW",
-    "item_name": "exact item name from list above",
-    "quantity": 0,
-    "branch": null,
-    "notes": "brief notes",
-    "confidence": 90,
-    "item_new": false,
-    "new_item_name": null,
-    "new_category": "General",
-    "new_price": 0,
-    "ai_reasoning": "why this match"
-  }
-]`;
+Respond ONLY with a JSON object containing a "transactions" array. No other text:
+{
+  "transactions": [
+    {
+      "type": "IN|OUT|ADJUSTMENT|CHECK|UNKNOWN",
+      "item_code": "exact SKU from list above or NEW",
+      "item_name": "exact item name from list above",
+      "quantity": 0,
+      "branch": null,
+      "notes": "brief notes",
+      "confidence": 90,
+      "item_new": false,
+      "new_item_name": null,
+      "new_category": "General",
+      "new_price": 0,
+      "ai_reasoning": "why this match"
+    }
+  ]
+}`;
 
   let parsedList;
   let aiRaw = "";
@@ -339,6 +441,7 @@ Respond ONLY with a JSON array. No other text:
     }
   } catch (err) {
     Logger.log("AI error: " + err);
+    debugLog("AI error: " + err);
     const errStr = err.toString().toLowerCase();
     
     if (errStr.includes("failed") || errStr.includes("unauthorized") || errStr.includes("api key") || errStr.includes("key not valid") || errStr.includes("provider")) {
@@ -370,8 +473,8 @@ Respond ONLY with a JSON array. No other text:
       continue;
     }
 
-    if (parsed.quantity <= 0 && parsed.type !== "ADJUSTMENT") {
-      if (chatId) _sendAgentMsg(source, chatId, `❌ Could not detect a valid quantity for ${parsed.item_name}.`);
+    if (parsed.quantity <= 0 && parsed.type !== "ADJUSTMENT" && !(parsed.type === "IN" && (parsed.item_new === true || parsed.item_new === "true"))) {
+      if (chatId) _sendAgentMsg(source, chatId, `❌ Could not detect a valid quantity for ${parsed.item_name || parsed.new_item_name || "item"}.`);
       continue;
     }
 
@@ -407,11 +510,12 @@ function _executeAgentTransaction(chatId, parsed, senderName, source, rawText) {
     lock.waitLock(30000);
     
     debugLog("_executeAgentTransaction START: code=" + parsed.item_code + " name=" + parsed.item_name);
-    const item = _findItem(parsed.item_code, parsed.item_name);
+    if (parsed.item_code === "AMBIGUOUS") { if (chatId) _sendAgentMsg(source, chatId, "⚠️ **Ambiguitas Ditemukan:** " + parsed.notes); return; }
+    let item = _findItem(parsed.item_code, parsed.item_name);
     debugLog("_findItem result: " + (item ? "FOUND row=" + item.row + " name=" + item.name + " stock=" + item.stock : "NULL"));
 
   if (!item) {
-    if (parsed.item_new === true) {
+    if (parsed.item_new === true || parsed.item_new === "true") {
       if (rawText.toLowerCase().includes("/onboarding")) {
         item = _createNewItemRow(parsed);
         if (chatId) _sendAgentMsg(source, chatId, `✅ New item added: *${item.name}* (${item.code}). Category: ${parsed.new_category}, Price: Rp${parsed.new_price}. Continuing transaction...`);
@@ -427,7 +531,7 @@ function _executeAgentTransaction(chatId, parsed, senderName, source, rawText) {
     }
   } else {
     // If item exists, but AI thought it was new, or user used /onboarding but it matched an existing item.
-    if (rawText.toLowerCase().includes("/onboarding") && parsed.item_new === true) {
+    if (rawText.toLowerCase().includes("/onboarding") && (parsed.item_new === true || parsed.item_new === "true")) {
       if (chatId) _sendAgentMsg(source, chatId, `⚠️ You used /onboarding for "${parsed.item_name}", but this item ALREADY EXISTS in the database with code ${item.code}. Item creation cancelled. Continuing stock update...`);
     }
   }
@@ -727,10 +831,18 @@ function _sendWhatsApp(phone, text) {
   } catch (e) { Logger.log("WhatsApp send error: " + e); }
 }
 
-function _sendEmailNotification(to, subject, htmlBody) {
-  try { GmailApp.sendEmail(to, subject, "", { htmlBody }); }
-  catch (e) { Logger.log("Email error: " + e); }
-}
+  // --- NOTIFICATION HANDLERS --------------------------------------------------
+  function _sendEmailNotification(recipient, subject, body) {
+    try {
+      GmailApp.sendEmail(recipient, subject, body);
+    } catch (e) {
+      debugLog("EMAIL FAILED TO SEND: " + e.message);
+      const adminId = PropertiesService.getScriptProperties().getProperty("ADMIN_CHAT_ID");
+      if (adminId) {
+        _sendTelegram(adminId, `⚠️ <b>SYSTEM ALERT</b> ⚠️\n\nGagal mengirim email balasan ke ${recipient} karena limit kuota Gmail.\n\n<b>Status Sistem:</b> Perintah pengguna telah diproses oleh AI, namun balasan tertahan.`);
+      }
+    }
+  }
 
 // ─── GEMINI AI ────────────────────────────────────────────────
 function _callGemini(prompt, apiKey) {
@@ -756,12 +868,60 @@ function _formatTimestamp(d) {
 
 // ─── WHATSAPP WEBHOOK VERIFICATION ───────────────────────────
 function doGet(e) {
+  if (e.parameter["action"] === "test_debuglog") {
+    debugLog("HELLO FROM TEST_DEBUGLOG");
+    return ContentService.createTextOutput("Test DebugLog executed");
+  }
   if (e.parameter["action"] === "get_logs") {
-    const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Logs");
+    const ss = _getSpreadsheet();
+    if (!ss) return ContentService.createTextOutput("No Spreadsheet");
+    const sheet = ss.getSheetByName("DebugLogs");
     if (!sheet) return ContentService.createTextOutput("No Logs sheet");
     const data = sheet.getDataRange().getValues();
-    const lastLogs = data.slice(-5);
+    const lastLogs = data.slice(-15);
     return ContentService.createTextOutput(JSON.stringify(lastLogs));
+  }
+  if (e.parameter["action"] === "diagnose") {
+    let result = "DIAGNOSTICS:\n";
+    try {
+      const ss = _getSpreadsheet();
+      result += "1. _getSpreadsheet: SUCCESS. ID=" + ss.getId() + "\n";
+      const sheet = ss.getSheetByName("DebugLogs");
+      if (sheet) result += "2. DebugLogs Sheet: SUCCESS.\n";
+      const id = PropertiesService.getScriptProperties().getProperty("SHEET_ID");
+      result += "3. SHEET_ID in Properties: " + id + "\n";
+      const data = sheet.getDataRange().getValues();
+      const lastLogs = data.slice(0, 15).map(r => r.join(" | ")).join("\n");
+      return ContentService.createTextOutput(result + "\nLOGS:\n" + lastLogs);
+    } catch(err) {
+      return ContentService.createTextOutput(result + "ERROR: " + err.message + "\n" + err.stack);
+    }
+  }
+  if (e.parameter["action"] === "force_poll") {
+    pollEmails();
+    return ContentService.createTextOutput("Forced poll executed successfully. Check DebugLogs.");
+  }
+  if (e.parameter["action"] === "set_sheet_id") {
+    const id = e.parameter["id"];
+    if (id) {
+      PropertiesService.getScriptProperties().setProperty("SHEET_ID", id);
+      return ContentService.createTextOutput("SHEET_ID successfully set to: " + id);
+    }
+    return ContentService.createTextOutput("Missing id parameter");
+  }
+
+  if (e.parameter["action"] === "register_webhook") {
+    try {
+      const props = PropertiesService.getScriptProperties();
+      const token = props.getProperty("TG_TOKEN");
+      if (!token) return ContentService.createTextOutput("No TG_TOKEN");
+      const secret = props.getProperty("WEBHOOK_SECRET");
+      const webhookUrl = ScriptApp.getService().getUrl() + "?token=" + secret;
+      const resp = UrlFetchApp.fetch(`https://api.telegram.org/bot${token}/setWebhook?url=${encodeURIComponent(webhookUrl)}&drop_pending_updates=true`, { muteHttpExceptions: true });
+      return ContentService.createTextOutput("Webhook Registration Response: " + resp.getContentText());
+    } catch (err) {
+      return ContentService.createTextOutput("Webhook Registration Error: " + err);
+    }
   }
 
   // WhatsApp Cloud API webhook verification challenge

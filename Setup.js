@@ -40,20 +40,12 @@ function _getSpreadsheet() {
     const ss = SpreadsheetApp.getActiveSpreadsheet();
     if (ss) return ss;
   } catch(e) {}
-  // Fallback: open by script's parent spreadsheet ID
-  const scriptId = ScriptApp.getScriptId();
-  const files = DriveApp.searchFiles('mimeType = "application/vnd.google-apps.spreadsheet"');
-  while (files.hasNext()) {
-    const file = files.next();
-    try {
-      const ss = SpreadsheetApp.openById(file.getId());
-      // Check if this spreadsheet has our script bound to it
-      const sheets = ss.getSheets();
-      if (sheets.some(s => s.getName().toLowerCase().includes("inventory"))) {
-        return ss;
-      }
-    } catch(e) {}
+  
+  const id = PropertiesService.getScriptProperties().getProperty("SHEET_ID");
+  if (id) {
+    try { return SpreadsheetApp.openById(id); } catch(e) {}
   }
+  
   return null;
 }
 
@@ -122,6 +114,8 @@ function _buildFullMenu() {
   SpreadsheetApp.getUi()
     .createMenu("📦 Inventory System")
     .addItem("🏠 Go to Dashboard",           "navDashboard")
+    .addItem("🔧 Fix Background Error (Klik 1x)", "forceSaveSheetId")
+    .addItem("🔧 Register Webhook Telegram", "forceRegisterWebhook")
     .addSeparator()
     .addItem("➕ Stock In",                   "dialogStockIn")
     .addItem("➖ Stock Out",                  "dialogStockOut")
@@ -137,9 +131,11 @@ function _buildFullMenu() {
     .addSeparator()
     .addItem("📱 AI Config / Agent Settings", "showAgentSettings")
     .addItem("💬 Open Chat Simulator", "simulateChat")
+    .addItem("📨 Manual Poll Emails", "pollEmails")
     .addSeparator()
     .addItem("🔑 License Manager (Admin)",    "showLicenseManager")
     .addItem("🐛 Debug Error Message",        "debugErrorsUI")
+    .addItem("⚙️  Run Automated Tests",       "runAllTests")
     .addSeparator()
     .addItem("ℹ️  About",                     "showAbout")
     .addToUi();
@@ -1091,8 +1087,7 @@ function showAgentSettings() {
     </div>
     <div class="section">
       <h3>📧 Email Triggers & Notifications</h3>
-      <label>Admin Email (For Reports & Transactions)</label>
-      <input id="admin_email" value="${_escapeHtml(props.getProperty("ADMIN_EMAIL") || Session.getActiveUser().getEmail())}" placeholder="admin@youremail.com" />
+      <label>Email Triggers (Uses your current Google Account automatically)</label>
       <p class="note">AI will automatically process emails with the subject "AI Inventory Report".</p>
     </div>
     <div id="statusMsg" style="margin-top:12px; font-weight:bold; font-size:12px; text-align:center;"></div>
@@ -1110,19 +1105,19 @@ function showAgentSettings() {
           wa_phone_id: document.getElementById('wa_phone_id').value,
           wa_token: document.getElementById('wa_token').value,
           tg_token: document.getElementById('tg_token').value,
-          tg_admin_id: document.getElementById('tg_admin_id').value,
-          admin_email: document.getElementById('admin_email').value,
+          tg_admin_id: document.getElementById('tg_admin_id').value
         };
         
         google.script.run
           .withSuccessHandler(() => {
-            msg.textContent = '✅ Settings saved! Agent is now active.';
+            btn.textContent = '💾 Save Settings & Activate Agent';
+            btn.disabled = false;
+            msg.textContent = '✅ Settings Saved & Agent Activated!';
             msg.style.color = '#10B981';
-            setTimeout(() => google.script.host.close(), 1500);
           })
-          .withFailureHandler((err) => {
-            msg.textContent = '❌ ERROR: ' + err.message;
-            msg.style.color = '#FCA5A5';
+          .withFailureHandler(err => {
+            msg.textContent = '❌ Error: ' + err.message;
+            msg.style.color = '#EF4444';
             btn.textContent = '💾 Save Settings & Activate Agent';
             btn.disabled = false;
           })
@@ -1146,21 +1141,31 @@ function simulateChat() {
 
 function saveAgentSettings(data) {
   const props = PropertiesService.getScriptProperties();
-  props.setProperty("WA_PHONE_ID",  data.wa_phone_id  || "");
-  props.setProperty("WA_TOKEN",     data.wa_token     || "");
-  props.setProperty("TG_TOKEN",     data.tg_token     || "");
-  props.setProperty("TG_ADMIN_ID",  data.tg_admin_id  || "");
-  props.setProperty("ADMIN_EMAIL",  data.admin_email  || "");
-  // Register Telegram webhook
-  if (data.tg_token) {
-    _registerTelegramWebhook(data.tg_token);
-  }
-  // Set polling triggers
-  _removeAllTriggers("pollTelegram");
+  if (data.wa_phone_id) props.setProperty("WA_PHONE_ID",  data.wa_phone_id);
+  if (data.wa_token)    props.setProperty("WA_TOKEN",     data.wa_token);
+  if (data.tg_token)    props.setProperty("TG_TOKEN",     data.tg_token);
+  if (data.tg_admin_id) props.setProperty("TG_ADMIN_ID",  data.tg_admin_id);
+  if (data.admin_email) props.setProperty("ADMIN_EMAIL",  data.admin_email);
+  
   _removeAllTriggers("pollWhatsApp");
   _removeAllTriggers("pollEmails");
-  if (data.tg_token) ScriptApp.newTrigger("pollTelegram").timeBased().everyMinutes(1).create();
-  if (data.admin_email) ScriptApp.newTrigger("pollEmails").timeBased().everyMinutes(5).create();
+  _removeAllTriggers("pollTelegram");
+  
+  const adminEmail = Session.getActiveUser().getEmail();
+  props.setProperty("ADMIN_EMAIL", adminEmail);
+  props.setProperty("SHEET_ID", SpreadsheetApp.getActiveSpreadsheet().getId());
+  
+  // Set up FULLY AUTONOMOUS background workers (Polling)
+  // This bypasses all Google Apps Script Webhook 302 restrictions
+  ScriptApp.newTrigger("pollEmails").timeBased().everyMinutes(5).create();
+  if (data.tg_token || props.getProperty("TG_TOKEN")) {
+    const t = data.tg_token || props.getProperty("TG_TOKEN");
+    try {
+      // Unregister webhook to avoid 302 loops and allow getUpdates to work
+      UrlFetchApp.fetch(`https://api.telegram.org/bot${t}/setWebhook?url=`, { muteHttpExceptions: true });
+    } catch(e) {}
+    ScriptApp.newTrigger("pollTelegram").timeBased().everyMinutes(1).create();
+  }
 }
 
 function _registerTelegramWebhook(token) {
@@ -1229,13 +1234,21 @@ function _getInventoryContext() {
   if (!sh) return "No data";
   const lastCol = sh.getLastColumn();
   if (lastCol === 0) return "No data";
-  const data = sh.getDataRange().getValues();
+  const data = sh.getDataRange().getDisplayValues(); // use DisplayValues to format properly
   if (data.length < 2) return "No data";
-  const cmap = _getInventoryColMap(data[0]);
+  
+  const headers = data[0];
   const items = [];
-  for (let i = 1; i < data.length && items.length < 60; i++) {
-    if (!data[i][cmap.code]) continue;
-    items.push(`${data[i][cmap.code]} | ${data[i][cmap.name]} | ${data[i][cmap.category]} | Stock:${data[i][cmap.stock]}`);
+  
+  for (let i = 1; i < data.length && items.length < 100; i++) {
+    if (!data[i][0]) continue; // assume first column is ID/Code
+    let rowProps = [];
+    for (let c = 0; c < headers.length; c++) {
+      if (headers[c] && data[i][c] && data[i][c].toString().trim() !== "") {
+        rowProps.push(headers[c] + ":" + data[i][c]);
+      }
+    }
+    items.push(rowProps.join(" | "));
   }
   return items.join("\n") || "No items";
 }
@@ -1280,7 +1293,7 @@ function _getInventoryColMap(headers) {
     // Status
     ["status",   h => h.includes("status") || h.includes("kondisi") || h.includes("state") || h.includes("estado") || h.includes("etat")],
     // Generic Stock / Current Stock (checked LAST so specific stock in/out/min get matched first)
-    ["stock",    h => h === "stock" || h === "stok" || h === "qty" || h.includes("quantity") || h === "jumlah" || h.includes("persediaan") || h.includes("saldo") || h.includes("inventario") || h.includes("inventaire") || h.includes("bestand") || h.includes("cantidad")],
+    ["stock",    h => h.includes("stock") || h.includes("stok") || h.includes("qty") || h.includes("quantity") || h.includes("jumlah") || h.includes("persediaan") || h.includes("saldo") || h.includes("inventario") || h.includes("inventaire") || h.includes("bestand") || h.includes("cantidad")],
   ];
 
   for (let i = 0; i < normalized.length; i++) {
@@ -1666,4 +1679,25 @@ function _colLetter(idx) {
     n = Math.floor(n / 26) - 1;
   }
   return letter;
+}
+
+function _registerTelegramWebhook(token) {
+  try {
+    const props = PropertiesService.getScriptProperties();
+    const secret = props.getProperty("WEBHOOK_SECRET");
+    let webhookUrl = ScriptApp.getService().getUrl();
+    if (webhookUrl.endsWith("/dev")) {
+      webhookUrl = webhookUrl.replace("/dev", "/exec");
+    }
+    webhookUrl += "?token=" + secret;
+    debugLog("Registering Webhook: " + webhookUrl);
+    
+    UrlFetchApp.fetch(`https://api.telegram.org/bot/setWebhook?url=`, { muteHttpExceptions: true });
+  } catch (e) { Logger.log("Webhook registration failed: " + e); debugLog("Webhook Error: " + e); }
+}
+
+function forceSaveSheetId() {
+  const id = SpreadsheetApp.getActiveSpreadsheet().getId();
+  PropertiesService.getScriptProperties().setProperty("SHEET_ID", id);
+  SpreadsheetApp.getUi().alert("✅ SYSTEM FIXED!\nID Spreadsheet Anda berhasil dikunci: " + id + "\nSistem latar belakang kini bisa beroperasi penuh.");
 }

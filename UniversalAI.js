@@ -28,6 +28,19 @@
 //    • auto         → tries all configured keys in priority order
 // ============================================================
 
+/**
+ * Universal AI Provider Integration
+ * Handles interactions with Groq, Gemini, Claude, Local LLMs (Ollama)
+ */
+
+function _safeParseJSON(text) {
+  try {
+    return JSON.parse(text);
+  } catch (e) {
+    throw new Error(`API returned invalid JSON (Possible Timeout/Cloudflare 524): ${text.substring(0, 150)}`);
+  }
+}
+
 // ─── AI PROVIDER CONFIGURATION ───────────────────────────────
 // Edit this section in Agent Settings sidebar, or directly here.
 // Priority order for AUTO mode: first non-empty key wins.
@@ -216,10 +229,23 @@ const AI_PROVIDERS_CONFIG = {
     docs: "",
     note: "Any API that follows OpenAI format: LM Studio, vLLM, text-generation-webui, etc."
   },
+
+  // ── 9router (Local/Proxy AI Router) ────────────────────────
+  "9router": {
+    name: "9router (Local Proxy)",
+    url: "{baseUrl}/v1/chat/completions",
+    format: "openai",
+    defaultModel: "default",
+    models: ["default", "llama3", "gpt-4o", "gemini-pro"],
+    propKey: "AI_9ROUTER_URL",     // stores the Ngrok/Cloudflare URL
+    modelProp: "AI_9ROUTER_MODEL",
+    docs: "https://github.com/9router/9router",
+    note: "Gunakan Ngrok/Cloudflare Tunnel jika dijalankan di localhost!"
+  },
 };
 
 // Priority order for AUTO mode
-const AI_AUTO_PRIORITY = ["gemini", "groq", "openrouter", "openai", "anthropic", "mistral", "deepseek", "together", "perplexity", "fireworks", "huggingface", "ollama", "custom"];
+const AI_AUTO_PRIORITY = ["gemini", "groq", "openrouter", "openai", "anthropic", "mistral", "deepseek", "together", "perplexity", "fireworks", "huggingface", "ollama", "custom", "9router"];
 
 // ─── UNIVERSAL AI CALLER ─────────────────────────────────────
 /**
@@ -293,6 +319,10 @@ function _callOpenAICompatible(config, prompt, systemPrompt) {
     const baseUrl = (apiKey || "").replace(/\/$/, "");
     apiKey = props.getProperty("AI_CUSTOM_API_KEY") || "";
     url = baseUrl + "/v1/chat/completions";
+  } else if (config.name === "9router (Local Proxy)") {
+    const baseUrl = (apiKey || "").replace(/\/$/, "");
+    apiKey = props.getProperty("AI_CUSTOM_API_KEY") || "";
+    url = baseUrl + "/v1/chat/completions";
   } else if (config.name === "Hugging Face") {
     url = url.replace("{model}", model);
   }
@@ -304,6 +334,8 @@ function _callOpenAICompatible(config, prompt, systemPrompt) {
   const headers = {
     "Content-Type": "application/json",
     "Authorization": "Bearer " + apiKey,
+    "Bypass-Tunnel-Reminder": "true",
+    "ngrok-skip-browser-warning": "69420"
   };
 
   // Extra headers for specific providers (e.g. OpenRouter)
@@ -332,7 +364,7 @@ function _callOpenAICompatible(config, prompt, systemPrompt) {
 
   const status = resp.getResponseCode();
   const text   = resp.getContentText();
-  const json   = JSON.parse(text);
+  const json   = _safeParseJSON(text);
 
   if (status !== 200 || json.error) {
     const errMsg = json.error?.message || json.error || `HTTP ${status}: ${text.substring(0, 200)}`;
@@ -349,15 +381,15 @@ function _callGeminiProvider(config, prompt, systemPrompt) {
   const model  = props.getProperty(config.modelProp) || config.defaultModel;
   const url    = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
 
-  const parts = [];
-  if (systemPrompt) parts.push({ text: "System: " + systemPrompt + "\n\n" });
-  parts.push({ text: prompt });
+  let combinedText = "";
+  if (systemPrompt) combinedText += "System: " + systemPrompt + "\n\n";
+  combinedText += prompt;
 
   const resp = UrlFetchApp.fetch(url, {
     method: "post",
     contentType: "application/json",
     payload: JSON.stringify({
-      contents: [{ parts }],
+      contents: [{ parts: [{ text: combinedText }] }],
       generationConfig: { temperature: 0.1, maxOutputTokens: 1024 },
       safetySettings: [
         { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
@@ -367,7 +399,7 @@ function _callGeminiProvider(config, prompt, systemPrompt) {
     muteHttpExceptions: true,
   });
 
-  const json = JSON.parse(resp.getContentText());
+  const json = _safeParseJSON(resp.getContentText());
   if (json.error) throw new Error(json.error.message);
   return json.candidates[0].content.parts[0].text;
 }
@@ -396,7 +428,7 @@ function _callAnthropicProvider(config, prompt, systemPrompt) {
     muteHttpExceptions: true,
   });
 
-  const json = JSON.parse(resp.getContentText());
+  const json = _safeParseJSON(resp.getContentText());
   if (json.error) throw new Error(json.error.message);
   return json.content[0].text;
 }
@@ -416,9 +448,9 @@ function _callOllamaProvider(config, prompt, systemPrompt) {
     contentType: "application/json",
     payload: JSON.stringify({ model, messages, stream: false }),
     muteHttpExceptions: true,
-  });
-
-  const json = JSON.parse(resp.getContentText());
+    });
+  
+  const json = _safeParseJSON(resp.getContentText());
   if (json.error) throw new Error(json.error);
   return json.message.content;
 }
@@ -432,7 +464,7 @@ function showAIProviderSettings() {
     const savedKey = props.getProperty(cfg.propKey) || "";
     const savedModel = props.getProperty(cfg.modelProp) || cfg.defaultModel;
     const modelOptions = cfg.models.map(m => `<option value="${m}">${m}</option>`).join("");
-    const isOllama = key === "ollama" || key === "custom";
+    const isOllama = key === "ollama" || key === "custom" || key === "9router";
     const isActive = current === key;
 
     return `
@@ -445,8 +477,8 @@ function showAIProviderSettings() {
         <div class="prov-body ${isActive ? "" : "hidden"}" id="body-${key}">
           <label>${isOllama ? "Base URL / Server URL" : "API Key"}</label>
           <input type="text" id="key-${key}" value="${savedKey}"
-            placeholder="${isOllama ? (key === "ollama" ? "http://your-server:11434" : "http://localhost:1234") : "Paste your API key here"}" />
-          ${key === "custom" ? `<label>Custom API Key (Bearer)</label><input type="text" id="customApiKey" value="${props.getProperty("AI_CUSTOM_API_KEY") || ""}" placeholder="Optional auth token" />` : ""}
+            placeholder="${isOllama ? (key === "ollama" ? "http://your-server:11434" : (key === "9router" ? "https://ai.ngrok.io" : "http://localhost:1234")) : "Paste your API key here"}" />
+          ${key === "custom" || key === "9router" ? `<label>Custom API Key (Bearer)</label><input type="text" id="customApiKey_${key}" value="${props.getProperty("AI_CUSTOM_API_KEY") || ""}" placeholder="Optional auth token" />` : ""}
           <label>Model</label>
             ${cfg.models.length > 0
               ? `<input type="text" id="model-${key}" value="${savedModel}" list="list-${key}" placeholder="Select or type model..." style="width:100%; padding:8px; background:#0F172A; border:1px solid #334155; border-radius:6px; color:#F1F5F9;" />
@@ -541,7 +573,12 @@ function showAIProviderSettings() {
             data['key_${k}'] = (document.getElementById('key-${k}') || {value:''}).value;
             data['model_${k}'] = (document.getElementById('model-${k}') || {value:''}).value;
           `).join("")}
-          data['customApiKey'] = (document.getElementById('customApiKey') || {value:''}).value;
+          const activeCustomKey = document.getElementById('customApiKey_' + selectedProvider);
+          if (activeCustomKey) {
+            data['customApiKey'] = activeCustomKey.value;
+          } else {
+            data['customApiKey'] = (document.getElementById('customApiKey_custom') || {value:''}).value || (document.getElementById('customApiKey_9router') || {value:''}).value;
+          }
           return data;
         }
 
@@ -592,6 +629,24 @@ function saveUniversalAISettings(data) {
 
 // ─── TEST AI CONNECTION ────────────────────────────────────────
 function testAIConnection(providerName, formData) {
+  if (providerName === "9router") {
+    try {
+      const baseUrl = PropertiesService.getScriptProperties().getProperty("AI_9ROUTER_URL").replace(/\/$/, "");
+      const apiKey = PropertiesService.getScriptProperties().getProperty("AI_CUSTOM_API_KEY");
+      const resp = UrlFetchApp.fetch(baseUrl + "/v1/models", {
+        headers: {
+          "Authorization": "Bearer " + apiKey,
+          "Bypass-Tunnel-Reminder": "true",
+          "ngrok-skip-browser-warning": "69420"
+        },
+        muteHttpExceptions: true
+      });
+      return "SUCCESS! 9router responded with: " + resp.getContentText().substring(0, 100) + "...";
+    } catch (e) {
+      throw new Error("Proof fetch failed: " + e.message);
+    }
+  }
+
   // Save settings first
   if (formData) saveUniversalAISettings(formData);
 
@@ -606,7 +661,7 @@ function testAIConnection(providerName, formData) {
     } else {
       result = _callAIAuto(testPrompt, null);
     }
-    const parsed = JSON.parse(result.replace(/```json\n?|\n?```/g, "").trim());
+    const parsed = _safeParseJSON(result.replace(/```json\n?|\n?```/g, "").trim());
     const usedProvider = providerName === "auto" ? "(auto)" : AI_PROVIDERS_CONFIG[providerName]?.name;
     return `${parsed.message} — Provider: ${usedProvider}`;
   } catch (err) {
@@ -646,8 +701,9 @@ function _callGemini(prompt, apiKey) {
       generationConfig: { temperature: 0.1, maxOutputTokens: 1024 },
     }),
     muteHttpExceptions: true,
-  });
-  const json = JSON.parse(resp.getContentText());
+    });
+  const json = _safeParseJSON(resp.getContentText());
   if (json.error) throw new Error(json.error.message);
   return json.candidates[0].content.parts[0].text;
 }
+function test9RouterConnection() { const url = "https://vast-webs-occur.loca.lt/v1/models"; const resp = UrlFetchApp.fetch(url, { headers: { "Authorization": "Bearer 123456", "Bypass-Tunnel-Reminder": "true" } }); console.log("RESPONSE FROM GOOGLE SHEETS: " + resp.getContentText()); return resp.getContentText(); }
