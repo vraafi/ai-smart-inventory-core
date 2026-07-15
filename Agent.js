@@ -599,80 +599,38 @@ CRITICAL LOCALIZATION RULE: Detect the language of the user's input. You MUST pr
 
   let parsedList;
   let rootParsed = {};
-  let aiRaw = "";
+
   debugLog("Sending to AI...");
-  // --- METODE BERFIKIR 2X (SMART LOOP QA) ---
-  let maxAttempts = 3;
-  let attempt = 1;
-  let currentPrompt = prompt;
-  let success = false;
 
-  while (attempt <= maxAttempts && !success) {
-    try {
-      debugLog("Sending to AI (Attempt " + attempt + ")...");
-      aiRaw = callAI(currentPrompt, null);
-      debugLog("[ROUTING] AI Raw Output (Attempt " + attempt + "): " + aiRaw);
+  try {
+    // Delegate entirely to AIAgent's unified Smart Loop QA
+    let parsed = AIAgent.parseTransaction(rawText);
 
-      let parsed = AIAgent._extractJson(aiRaw);
-      if (parsed) {
+    if (parsed) {
         rootParsed = parsed || {};
         if (!Array.isArray(parsed) && typeof parsed === 'object') {
-          const keys = Object.keys(parsed);
-          for (const key of keys) {
-            if (Array.isArray(parsed[key])) {
-              parsed = parsed[key];
-              break;
+          // If the AI returns a single object that wraps an array (e.g., {"transactions": [...]})
+          if (parsed.transactions && Array.isArray(parsed.transactions)) {
+            parsed = parsed.transactions;
+          } else {
+            const keys = Object.keys(parsed);
+            for (const key of keys) {
+              if (Array.isArray(parsed[key])) {
+                parsed = parsed[key];
+                break;
+              }
             }
           }
         }
         parsedList = Array.isArray(parsed) ? parsed : [parsed];
-
-        // SELF VERIFICATION
-        let verifySys = "Anda adalah auditor QA internal. Verifikasi apakah JSON ini sudah memenuhi instruksi pengguna dengan tepat. Jawab HANYA dengan kata 'SUDAH' jika benar. Jika ada kesalahan logika, salah qty, salah nama barang, atau salah klasifikasi IN/OUT, sebutkan detail kesalahannya agar AI utama bisa memperbaiki.";
-        let verifyPrompt = "\nInstruksi Pengguna: \"" + rawText + "\"\n\nJSON yang dihasilkan:\n" + JSON.stringify(parsedList) + "\n\nApakah JSON ini sudah tepat sasaran?";
-        let verifyResult = callAI(verifyPrompt, verifySys);
-
-        if (verifyResult.trim().toUpperCase().startsWith("SUDAH") || attempt === maxAttempts) {
-           if (attempt === maxAttempts && !verifyResult.trim().toUpperCase().startsWith("SUDAH")) {
-               debugLog("⚠️ Max attempts reached, forcing execution. Last feedback: " + verifyResult);
-           } else {
-               debugLog("✅ Self-Verification Lolos pada percobaan ke-" + attempt);
-           }
-           success = true;
-           break;
-        } else {
-           debugLog("❌ Auditor Feedback (Attempt " + attempt + "): " + verifyResult);
-           currentPrompt = prompt + "\n\n[PERINGATAN DARI AUDITOR QA (Percobaan " + attempt + ")]:\n" + verifyResult + "\n\nTolong evaluasi kesalahan Anda dan perbaiki JSON Anda berdasarkan feedback di atas!";
-           attempt++;
-        }
-      } else {
-        throw new Error("No JSON block found");
-      }
-    } catch (err) {
-       if (attempt === maxAttempts) {
-           // Rethrow down to the main catch block
-           throw err;
-       }
-       debugLog("❌ Parsing Error (Attempt " + attempt + "): " + err.message);
-       currentPrompt = prompt + "\n\n[ERROR FORMATTING (Percobaan " + attempt + ")]:\n" + err.message + "\n\nPastikan format balasan HANYA berisi struktur JSON yang valid.";
-       attempt++;
+    } else {
+        throw new Error("Failed to parse transactions after multiple attempts.");
     }
-  }
-
-  try {
-     if (!success && !parsedList) {
-         throw new Error("Gagal setelah " + maxAttempts + " percobaan.");
-     }
   } catch (err) {
     Logger.log("AI error: " + err);
-    debugLog("AI error: " + err);
     debugLog("AI Error: " + err.message);
     if (chatId) {
-      if (!aiRaw) {
-         _sendAgentMsg(source, chatId, `❌ AI Provider Error: ${err.message}`);
-      } else {
-         _sendAgentMsg(source, chatId, `❌ Could not parse AI response. \n\nRAW AI OUTPUT:\n${aiRaw}\n\nPlease try a clearer format.`);
-      }
+      _sendAgentMsg(source, chatId, `❌ AI Provider Error: ${err.message}`);
     }
     return;
   }
