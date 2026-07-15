@@ -1,0 +1,11 @@
+**/**
+!*.js
+!*.html
+!appsscript.json
+mcp-context-mode/**
+temp_pull/**
+.agents/**
+node_modules/**
+test_*.js
+local-*.js
+obfuscate*.js

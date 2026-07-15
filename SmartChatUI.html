@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <style>
+    /* iOS 18 Premium Design System */
+    :root {
+      --bg-color: #f2f2f7;
+      --bubble-user: #007aff;
+      --bubble-ai: #e5e5ea;
+      --text-ai: #000000;
+      --text-user: #ffffff;
+      --glass-bg: rgba(255, 255, 255, 0.85);
+      --glass-border: rgba(255, 255, 255, 0.4);
+      --font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg-color: #000000;
+        --bubble-user: #0a84ff;
+        --bubble-ai: #2c2c2e;
+        --text-ai: #ffffff;
+        --glass-bg: rgba(28, 28, 30, 0.85);
+        --glass-border: rgba(255, 255, 255, 0.1);
+      }
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: var(--font-family);
+      background-color: var(--bg-color);
+      color: var(--text-ai);
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* Header */
+    .header {
+      background: var(--glass-bg);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border-bottom: 0.5px solid var(--glass-border);
+      padding: 16px;
+      text-align: center;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 8px;
+    }
+    .header-title {
+      font-weight: 600;
+      font-size: 17px;
+      letter-spacing: -0.4px;
+    }
+    .ai-badge {
+      background: linear-gradient(135deg, #FF2D55, #5856D6);
+      color: white;
+      font-size: 10px;
+      font-weight: 700;
+      padding: 2px 6px;
+      border-radius: 10px;
+    }
+
+    /* Chat Area */
+    .chat-container {
+      flex: 1;
+      padding: 16px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      scroll-behavior: smooth;
+    }
+
+    .bubble {
+      max-width: 75%;
+      padding: 10px 14px;
+      border-radius: 20px;
+      font-size: 15px;
+      line-height: 1.4;
+      word-wrap: break-word;
+      animation: popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    }
+    @keyframes popIn {
+      0% { opacity: 0; transform: scale(0.9) translateY(10px); }
+      100% { opacity: 1; transform: scale(1) translateY(0); }
+    }
+
+    .user-msg {
+      align-self: flex-end;
+      background-color: var(--bubble-user);
+      color: var(--text-user);
+      border-bottom-right-radius: 4px;
+    }
+
+    .ai-msg {
+      align-self: flex-start;
+      background-color: var(--bubble-ai);
+      color: var(--text-ai);
+      border-bottom-left-radius: 4px;
+      white-space: pre-wrap;
+    }
+
+    .system-msg {
+      align-self: center;
+      background: transparent;
+      color: #8e8e93;
+      font-size: 12px;
+      font-weight: 500;
+      text-align: center;
+      margin: 8px 0;
+    }
+
+    /* Input Area */
+    .input-area {
+      background: var(--glass-bg);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border-top: 0.5px solid var(--glass-border);
+      padding: 10px 16px 20px 16px;
+      display: flex;
+      align-items: flex-end;
+      gap: 10px;
+    }
+
+    .icon-btn {
+      background: none;
+      border: none;
+      color: #8e8e93;
+      font-size: 24px;
+      cursor: pointer;
+      padding: 6px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: color 0.2s;
+    }
+    .icon-btn:hover { color: var(--bubble-user); }
+
+    .text-input-wrapper {
+      flex: 1;
+      background: var(--bubble-ai);
+      border-radius: 20px;
+      padding: 8px 12px;
+      display: flex;
+      align-items: center;
+    }
+
+    .text-input {
+      width: 100%;
+      background: transparent;
+      border: none;
+      color: var(--text-ai);
+      font-size: 15px;
+      font-family: var(--font-family);
+      outline: none;
+      resize: none;
+      max-height: 100px;
+      overflow-y: auto;
+    }
+
+    .send-btn {
+      background: var(--bubble-user);
+      color: white;
+      border: none;
+      border-radius: 50%;
+      width: 32px;
+      height: 32px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      margin-left: 8px;
+      font-weight: bold;
+      transition: transform 0.1s;
+    }
+    .send-btn:active { transform: scale(0.9); }
+
+    /* Action Menu Overlay */
+    .action-menu {
+      position: absolute;
+      bottom: 80px;
+      left: 16px;
+      background: var(--glass-bg);
+      backdrop-filter: blur(25px);
+      -webkit-backdrop-filter: blur(25px);
+      border: 0.5px solid var(--glass-border);
+      border-radius: 14px;
+      padding: 8px;
+      display: none;
+      flex-direction: column;
+      gap: 4px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+      z-index: 100;
+      animation: fadeUp 0.2s ease-out;
+    }
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .action-menu.active { display: flex; }
+    
+    .action-item {
+      padding: 10px 16px;
+      font-size: 15px;
+      font-weight: 500;
+      color: var(--text-ai);
+      border-radius: 8px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      border: none;
+      background: transparent;
+      text-align: left;
+    }
+    .action-item:hover { background: rgba(142, 142, 147, 0.15); }
+    .action-item.danger { color: #FF3B30; }
+
+    /* Typing Indicator */
+    .typing {
+      display: flex;
+      gap: 4px;
+      padding: 12px 16px;
+      background: var(--bubble-ai);
+      border-radius: 20px;
+      border-bottom-left-radius: 4px;
+      width: fit-content;
+      align-self: flex-start;
+    }
+    .typing-dot {
+      width: 6px;
+      height: 6px;
+      background: #8e8e93;
+      border-radius: 50%;
+      animation: typing 1.4s infinite ease-in-out both;
+    }
+    .typing-dot:nth-child(1) { animation-delay: -0.32s; }
+    .typing-dot:nth-child(2) { animation-delay: -0.16s; }
+    @keyframes typing {
+      0%, 80%, 100% { transform: scale(0); }
+      40% { transform: scale(1); }
+    }
+
+    /* File Attachment Preview */
+    .file-preview {
+      font-size: 12px;
+      color: var(--bubble-user);
+      margin-bottom: 4px;
+      display: none;
+      align-items: center;
+      gap: 4px;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="header">
+    <span class="header-title">Smart Action Center</span>
+    <span class="ai-badge">Gemma-4-31B</span>
+  </div>
+
+  <div class="chat-container" id="chat">
+    <div class="system-msg">Today</div>
+    <div class="bubble ai-msg">Halo! Saya asisten AI Smart Inventory. Ada yang bisa saya bantu?<br><br>Anda bisa:<br>1. Tekan tombol <b>+</b> untuk menu Cepat.<br>2. Upload file (.png, .csv, .pdf) menggunakan <b>📎</b>.<br>3. Paste link Google Sheets.</div>
+  </div>
+
+  <div class="action-menu" id="actionMenu">
+    <button class="action-item" onclick="triggerAction('/onboarding')">🆕 Registrasi Barang Baru</button>
+    <button class="action-item" onclick="triggerAction('/format')">🧹 Format Sheet</button>
+    <button class="action-item danger" onclick="triggerAction('/wipe')">⚠️ Wipe Data (Reset)</button>
+  </div>
+
+  <div class="input-area">
+    <button class="icon-btn" onclick="toggleMenu()">+</button>
+    
+    <label class="icon-btn" style="cursor: pointer;">
+      📎
+      <input type="file" id="fileInput" style="display: none;" accept=".png,.jpg,.jpeg,.pdf,.csv">
+    </label>
+
+    <div style="flex:1; display:flex; flex-direction:column;">
+      <div class="file-preview" id="filePreview">📄 <span id="fileName"></span></div>
+      <div class="text-input-wrapper">
+        <input type="text" id="msgInput" class="text-input" placeholder="Message or GS Link..." onkeypress="handleEnter(event)">
+        <button class="send-btn" onclick="sendMessage()">↑</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let currentFile = null;
+
+    document.getElementById('fileInput').addEventListener('change', function(e) {
+      const file = e.target.files[0];
+      if (file) {
+        currentFile = file;
+        document.getElementById('fileName').innerText = file.name;
+        document.getElementById('filePreview').style.display = 'flex';
+      }
+    });
+
+    function toggleMenu() {
+      const menu = document.getElementById('actionMenu');
+      menu.classList.toggle('active');
+    }
+
+    function triggerAction(command) {
+      toggleMenu();
+      
+      const inputEl = document.getElementById('msgInput');
+      
+      if (command === '/onboarding') {
+        appendMessage("Memulai Registrasi Barang Baru. Ketik detail barang (contoh: 10pcs Macbook Pro 2026 harga 25000000) atau lampirkan file (nota/CSV/PDF).", 'ai');
+        inputEl.value = "/onboarding ";
+      } else if (command === '/wipe') {
+        appendMessage("⚠️ PERINGATAN: Perintah ini akan mengosongkan seluruh data pada lembar Inventory dan Transactions. Ketik /wipe confirm jika Anda yakin.", 'ai');
+        inputEl.value = "/wipe ";
+      } else if (command === '/format') {
+        appendMessage("Silakan jelaskan bagian mana yang ingin Anda format. Contoh: warnai header tabel menjadi merah.", 'ai');
+        inputEl.value = "/format ";
+      } else {
+        // Fallback for other commands
+        inputEl.value = command + " ";
+      }
+      
+      inputEl.focus();
+    }
+
+    function handleEnter(e) {
+      if (e.key === 'Enter') {
+        sendMessage();
+      }
+    }
+
+    function appendMessage(text, sender) {
+      const chat = document.getElementById('chat');
+      const bubble = document.createElement('div');
+      bubble.className = `bubble ${sender}-msg`;
+      bubble.innerHTML = text;
+      chat.appendChild(bubble);
+      chat.scrollTop = chat.scrollHeight;
+    }
+
+    function showTyping() {
+      const chat = document.getElementById('chat');
+      const typing = document.createElement('div');
+      typing.id = 'typingIndicator';
+      typing.className = 'typing';
+      typing.innerHTML = '<div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div>';
+      chat.appendChild(typing);
+      chat.scrollTop = chat.scrollHeight;
+    }
+
+    function hideTyping() {
+      const indicator = document.getElementById('typingIndicator');
+      if (indicator) indicator.remove();
+    }
+
+    function sendMessage() {
+      const input = document.getElementById('msgInput');
+      const text = input.value.trim();
+      
+      if (!text && !currentFile) return;
+
+      input.value = '';
+      document.getElementById('filePreview').style.display = 'none';
+      
+      let displayMsg = text;
+      if (currentFile) displayMsg += ` <i>(File terlampir: ${currentFile.name})</i>`;
+      if (!displayMsg) displayMsg = `<i>(Mengirim ${currentFile.name})</i>`;
+      
+      appendMessage(displayMsg, 'user');
+      showTyping();
+
+      if (currentFile) {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+          const base64Data = e.target.result;
+          const payload = {
+            text: text,
+            fileName: currentFile.name,
+            fileType: currentFile.type,
+            fileData: base64Data.split(',')[1] // Remove data URL prefix
+          };
+          currentFile = null;
+          document.getElementById('fileInput').value = ''; // reset
+          callServer(payload);
+        };
+        reader.readAsDataURL(currentFile);
+      } else {
+        callServer({ text: text });
+      }
+    }
+
+    function callServer(payload) {
+      google.script.run
+        .withSuccessHandler(response => {
+          hideTyping();
+          appendMessage(response, 'ai');
+        })
+        .withFailureHandler(error => {
+          hideTyping();
+          appendMessage("❌ Error: " + error.message, 'ai');
+        })
+        .processSmartChat(payload);
+    }
+  </script>
+</body>
+</html>

@@ -24,10 +24,14 @@ function debugLog(msg) {
 function doPost(e) {
   debugLog("doPost Triggered! Event: " + JSON.stringify(e));
   try {
-    const props = PropertiesService.getScriptProperties();
+    LicenseClient.require();
+    const props = _getScriptProps();
     const secret = props.getProperty("WEBHOOK_SECRET");
-    if (secret && e.parameter.token !== secret) {
-      return ContentService.createTextOutput("Forbidden: Invalid Webhook Token");
+    if (!secret) {
+      return ContentService.createTextOutput("500 Internal Server Error: Webhook secret is not configured on the server.");
+    }
+    if (e.parameter.token !== secret) {
+      return ContentService.createTextOutput("403 Forbidden: Invalid Webhook Token");
     }
 
     const body = JSON.parse(e.postData.contents);
@@ -64,13 +68,7 @@ function doPost(e) {
         const from   = msg.from;
         const name   = [from.first_name, from.last_name].filter(Boolean).join(" ") || from.username || "Employee";
         
-        // Save first person who chats as ADMIN automatically for push notifications
         if (text || msg.document) {
-          const existingAdmin = props.getProperty("ADMIN_CHAT_ID");
-          if (!existingAdmin) {
-            props.setProperty("ADMIN_CHAT_ID", chatId);
-            debugLog("Saved new ADMIN_CHAT_ID: " + chatId);
-          }
           debugLog("Processing TG Message from " + name + (msg.document ? " [Document attached]" : "") + ": " + text);
           _processTelegramMessage(chatId, text, name, msg.document);
         }
@@ -84,8 +82,74 @@ function doPost(e) {
   return HtmlService.createHtmlOutput("OK");
 }
 
+// ─── ACCESS CONTROL & WHITELIST ─────────────────────────────────
+function _checkAccess(idStr, text, platform) {
+  const props = _getScriptProps();
+  const adminId = props.getProperty("ADMIN_CHAT_ID");
+  
+  if (!adminId) {
+    props.setProperty("ADMIN_CHAT_ID", idStr);
+    props.setProperty("WHITELIST_IDS", idStr);
+    debugLog("Saved new ADMIN_CHAT_ID: " + idStr);
+    return true;
+  }
+  
+  const isPublic = props.getProperty("PUBLIC_MODE") === "ON";
+  const whitelistStr = props.getProperty("WHITELIST_IDS") || adminId;
+  const whitelist = whitelistStr.split(",").map(s => s.trim());
+  const isAllowed = isPublic || whitelist.includes(idStr);
+  
+  if (idStr === adminId) {
+    if (text.startsWith("/allow ")) {
+      const newId = text.replace("/allow ", "").trim();
+      if (!whitelist.includes(newId)) {
+        whitelist.push(newId);
+        props.setProperty("WHITELIST_IDS", whitelist.join(","));
+        _sendAgentMsg(platform, idStr, `✅ ID ${newId} berhasil didaftarkan ke sistem.`);
+      } else {
+        _sendAgentMsg(platform, idStr, `ℹ️ ID ${newId} sudah ada di dalam whitelist.`);
+      }
+      return "ADMIN_CMD";
+    }
+    if (text.startsWith("/block ")) {
+      const targetId = text.replace("/block ", "").trim();
+      if (targetId === adminId) {
+        _sendAgentMsg(platform, idStr, `❌ Tidak dapat memblokir diri sendiri.`);
+        return "ADMIN_CMD";
+      }
+      const newWhitelist = whitelist.filter(w => w !== targetId);
+      props.setProperty("WHITELIST_IDS", newWhitelist.join(","));
+      _sendAgentMsg(platform, idStr, `🚫 ID ${targetId} telah dicabut aksesnya.`);
+      return "ADMIN_CMD";
+    }
+    if (text === "/users") {
+      _sendAgentMsg(platform, idStr, `📋 *Daftar Akses (Whitelist):*\n- ` + whitelist.join("\n- ") + `\n\nMode Publik: ${isPublic ? "ON 🔓" : "OFF 🔒"}`);
+      return "ADMIN_CMD";
+    }
+    if (text === "/public_mode on") {
+      props.setProperty("PUBLIC_MODE", "ON");
+      _sendAgentMsg(platform, idStr, `🔓 Mode Publik DIAKTIFKAN.`);
+      return "ADMIN_CMD";
+    }
+    if (text === "/public_mode off") {
+      props.setProperty("PUBLIC_MODE", "OFF");
+      _sendAgentMsg(platform, idStr, `🔒 Mode Publik DIMATIKAN.`);
+      return "ADMIN_CMD";
+    }
+  }
+  
+  if (!isAllowed) {
+    _sendAgentMsg(platform, idStr, `⛔ *Akses Ditolak*\nAnda tidak terdaftar di sistem ini.\nID Anda: \`${idStr}\`\n\nBerikan ID ini kepada Admin untuk didaftarkan.`);
+    return false;
+  }
+  return true;
+}
+
 // ─── WHATSAPP MESSAGE HANDLER ──────────────────────────────
 function _processWhatsAppMessage(phone, text, senderName) {
+  const access = _checkAccess(phone.toString(), text || "", "whatsapp");
+  if (access === "ADMIN_CMD" || access === false) return;
+  
   if (text === "/start" || text === "/help") {
     _sendWhatsApp(phone, _buildWelcomeMessage(senderName));
     return;
@@ -107,11 +171,14 @@ function _processWhatsAppMessage(phone, text, senderName) {
 // ─── TELEGRAM MESSAGE HANDLER ────────────────────────────────
 function _processTelegramMessage(chatId, text, senderName, document) {
   let finalContext = text || "";
+  const access = _checkAccess(chatId.toString(), finalContext, "telegram");
+  if (access === "ADMIN_CMD" || access === false) return;
   
+  let bulkDataArray = null;
   if (document) {
     _sendTelegram(chatId, "⏳ Membaca dokumen Excel/CSV...");
     try {
-      const props = PropertiesService.getScriptProperties();
+      const props = _getScriptProps();
       const token = props.getProperty("TG_TOKEN");
       const fileResp = UrlFetchApp.fetch(`https://api.telegram.org/bot${token}/getFile?file_id=${document.file_id}`);
       const fileData = JSON.parse(fileResp.getContentText());
@@ -123,8 +190,22 @@ function _processTelegramMessage(chatId, text, senderName, document) {
         blob.setName(document.file_name || "document");
         blob.setContentType(document.mime_type || "");
         
-        const extractedText = _extractTextFromBlob(blob);
-        finalContext += `\n\n[FILE ATTACHMENT CONTENT: ${document.file_name}]\n` + extractedText;
+        const mime = blob.getContentType();
+        const name = blob.getName().toLowerCase();
+        
+        if (name.endsWith(".csv") || name.endsWith(".xlsx") || mime.includes("csv") || mime.includes("spreadsheetml") || mime.includes("excel")) {
+            bulkDataArray = _getRawDataArrayFromBlob(blob);
+            if (bulkDataArray && bulkDataArray.length > 1) {
+                finalContext += `\n\n[FILE ATTACHMENT RECEIVED: ${document.file_name} - Processing as Bulk Import]`;
+            } else {
+                bulkDataArray = null;
+                const extractedText = _extractTextFromBlob(blob);
+                if (extractedText) finalContext += `\n\n[FILE ATTACHMENT CONTENT: ${document.file_name}]\n` + extractedText;
+            }
+        } else {
+            const extractedText = _extractTextFromBlob(blob);
+            if (extractedText) finalContext += `\n\n[FILE ATTACHMENT CONTENT: ${document.file_name}]\n` + extractedText;
+        }
       }
     } catch(e) {
       _sendTelegram(chatId, "❌ Gagal mengekstrak dokumen: " + e.message);
@@ -145,9 +226,11 @@ function _processTelegramMessage(chatId, text, senderName, document) {
     _sendAgentMsg("telegram", chatId, _buildStockCheckResult(q));
     return;
   }
-  // Natural language — process with AI
-  _sendTelegram(chatId, "⏳ AI is processing your report...");
-  _processWithAI(chatId, finalContext, senderName, "Telegram");
+  
+  if (!bulkDataArray && !finalContext.match(/https:\/\/docs\.google\.com\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/)) {
+     _sendTelegram(chatId, "⏳ AI is processing your report...");
+  }
+  _processWithAI(chatId, finalContext, senderName, "Telegram", bulkDataArray);
 }
 
 // ─── WHATSAPP POLLING (backup if webhook fails) ──────────────
@@ -158,7 +241,7 @@ function pollWhatsApp() {
 
 // ─── TELEGRAM POLLING (backup for webhook) ───────────────────
 function pollTelegram() {
-  const props = PropertiesService.getScriptProperties();
+  const props = _getScriptProps();
   const token = props.getProperty("TG_TOKEN");
   if (!token) return;
   let offset = parseInt(props.getProperty("TG_OFFSET") || "0");
@@ -193,6 +276,7 @@ function pollTelegram() {
 
 // ─── EMAIL POLLING ────────────────────────────────────────────
 function pollEmails() {
+  LicenseClient.require();
   debugLog("pollEmails trigger fired!");
   try {
     const threads = GmailApp.search(`is:unread in:anywhere (subject:"Nexus AI Report" OR subject:"AI Inventory Notification" OR subject:"Inventory" OR subject:"Update" OR subject:"Laporan" OR subject:"Stok" OR subject:"Stock")`, 0, 5);
@@ -208,15 +292,29 @@ function pollEmails() {
         }
         const msgId = msg.getId();
         
-        // Skip if we already processed this exact email message
-        if (processed.includes(msgId)) {
-          debugLog(`Skipping message ${msgId} because it is in PROCESSED_EMAILS.`);
-          return;
+        // Skip if already processed in this property string
+        if (processed.includes(msgId)) continue;
+        
+        if (threadProcessedCount >= 1) {
+           // We only process the 1 newest unread message per thread to prevent infinite reply loops.
+           // Mark older unread messages in the same thread as read so they don't clog future polls.
+           msg.markRead();
+           continue;
         }
         
         debugLog(`Processing NEW UNREAD message: ${msgId}`);
         
         const subject   = msg.getSubject();
+        
+        // Anti Infinite-Loop: Skip emails sent by the AI itself, but allow user replies (which start with Re: or Fwd:)
+        const lowerSubject = subject.toLowerCase();
+        if ((subject.includes("AI Inventory Notification") || subject.includes("Nexus AI Report")) 
+            && !lowerSubject.startsWith("re:") 
+            && !lowerSubject.startsWith("fwd:")) {
+           msg.markRead();
+           continue;
+        }
+        
         const rawBody   = msg.getPlainBody().substring(0, 1500);
         const from      = msg.getFrom();
         const senderName = from.replace(/<.*>/g, "").trim() || from;
@@ -227,16 +325,26 @@ function pollEmails() {
 
         // Extract Attachments
         const attachments = msg.getAttachments();
+        let bulkDataArray = null;
         if (attachments.length > 0) {
           try {
-             for (let i = 0; i < attachments.length; i++) {
-                const mime = attachments[i].getContentType();
-                const name = attachments[i].getName().toLowerCase();
-                if (name.endsWith(".csv") || name.endsWith(".xlsx") || mime.includes("csv") || mime.includes("spreadsheetml") || mime.includes("excel")) {
-                    let extractedText = _extractTextFromBlob(attachments[i]);
-                    if (extractedText) {
-                       fullContext += `\n\n[FILE ATTACHMENT CONTENT: ${attachments[i].getName()}]\n` + extractedText;
+             for (let j = 0; j < attachments.length; j++) {
+                const mime = attachments[j].getContentType();
+                const name = attachments[j].getName().toLowerCase();
+                if (name.endsWith(".csv") || name.endsWith(".cvs") || name.endsWith(".xlsx") || mime.includes("csv") || mime.includes("spreadsheetml") || mime.includes("excel")) {
+                    if (!bulkDataArray) {
+                        bulkDataArray = _getRawDataArrayFromBlob(attachments[j]);
                     }
+                    if (bulkDataArray && bulkDataArray.length > 1) {
+                        fullContext += `\n\n[FILE ATTACHMENT RECEIVED: ${attachments[j].getName()} - Processing as Bulk Import]`;
+                    } else {
+                        bulkDataArray = null;
+                        let extractedText = _extractTextFromBlob(attachments[j]);
+                        if (extractedText) fullContext += `\n\n[FILE ATTACHMENT CONTENT: ${attachments[j].getName()}]\n` + extractedText;
+                    }
+                } else {
+                    let extractedText = _extractTextFromBlob(attachments[j]);
+                    if (extractedText) fullContext += `\n\n[FILE ATTACHMENT CONTENT: ${attachments[j].getName()}]\n` + extractedText;
                 }
              }
           } catch(e) {
@@ -255,111 +363,187 @@ function pollEmails() {
         processed += "," + msgId;
         props.setProperty("PROCESSED_EMAILS", processed.slice(-8000));
         msg.markRead();
-      });
-    });
-  } catch (err) { Logger.log("pollEmails error: " + err); }
+        
+        threadProcessedCount++;
+        globalProcessedCount++;
+      }
+    }
+  } catch (err) { debugLog("pollEmails error: " + err); }
 }
 
 // ─── CORE AI PROCESSING ──────────────────────────────────────
-function _processWithAI(chatId, rawText, senderName, source) {
-  const cache = CacheService.getScriptCache();
-  const wipeStateKey = "WIPE_STATE_" + chatId;
 
-  // 1. If user sends /wipe command
-  if (rawText.toLowerCase().includes("/wipe")) {
-    _sendAgentMsg(source, chatId, "⏳ AI is analyzing your destructive request...");
-    
-    const sheetNames = SpreadsheetApp.getActiveSpreadsheet().getSheets().map(s => s.getName()).join(", ");
-    const wipePrompt = `You are a destructive AI Action Engine for a Google Sheets Inventory System.
-The user wants to wipe/delete data or structure: "${rawText}".
-We have the following sheets in our system: ${sheetNames}. Do not invent sheet names that are not in this list. Use exact names!
-
-Generate exactly 4 options (a, b, c, d) for the user to confirm. 
-Option 'a' MUST be the exact destructive action they requested.
-Option 'b' MUST be a safer alternative (e.g. clear contents only).
-Option 'c' is always "Add your own custom instruction".
-Option 'd' is always "Cancel".
-
-For options 'a' and 'b', you must generate a JSON array of specific Apps Script execution commands.
-Supported commands:
-- {"cmd": "CLEAR_CONTENTS", "sheet": "SheetName", "range": "A2:Z1000"} (clears text only)
-- {"cmd": "CLEAR_FORMATS", "sheet": "SheetName", "range": "A2:Z1000"} (clears colors/designs)
-- {"cmd": "DELETE_COLUMNS", "sheet": "SheetName", "start": 1, "count": 5} (deletes physical columns)
-- {"cmd": "DELETE_ROWS", "sheet": "SheetName", "start": 2, "count": 100} (deletes physical rows)
-
-Return ONLY a valid JSON object exactly like this:
-{
-  "message": "⚠️ **Destructive Risk Warning!** ⚠️\\n\\na: [Describe action A and its risk]\\nb: [Describe action B as a safer alternative]\\nc: Add your own custom instruction\\nd: Cancel\\n\\nReply with a/b/c/d.",
-  "actions": {
-    "a": [{"cmd": "...", "sheet": "...", ...}],
-    "b": [{"cmd": "...", "sheet": "...", ...}]
+function _logSecurityAudit(source, senderName, senderId, messageText) {
+  try {
+    const ss = _getSpreadsheet();
+    let sheet = ss.getSheetByName("Security Audit");
+    if (sheet) {
+      const timestamp = Utilities.formatDate(new Date(), ss.getSpreadsheetTimeZone(), "yyyy-MM-dd HH:mm:ss");
+      sheet.appendRow([timestamp, source, senderName || "Unknown", senderId || "-", messageText || "-"]);
+    }
+  } catch(e) {
+    // Abaikan jika sheet dikunci atau error lainnya
   }
-}`;
-    
-    let aiRaw = "";
+}
+
+function _processWithAI(chatId, rawText, senderName, source, bulkDataArray = null) {
+  _logSecurityAudit(source, senderName, chatId, rawText);
+  const lowerText = rawText.toLowerCase();
+  
+  if (lowerText.includes("/wipe") || lowerText.includes("/format") || lowerText.includes("/onboarding")) {
+    _sendAgentMsg(source, chatId, "❌ FITUR DIBATASI (RESTRICTED FEATURE)\\n\\nFitur registrasi barang baru, hapus data, dan format tabel telah dipindahkan secara fisik ke UI Google Sheets demi keamanan Enterprise.\\n\\nSilakan minta Admin/Bos untuk membuka Google Sheets dan menggunakan menu '📦 Smart Inventory'.");
+    return;
+  }
+
+  // Handle Smart Bulk Import (Google Sheets URL or Bulk Data Array from CSV/Excel)
+  const urlMatch = rawText.match(/https:\/\/docs\.google\.com\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
+  if (bulkDataArray || urlMatch) {
+    _sendAgentMsg(source, chatId, "⏳ Membaca struktur data dokumen/tabel...");
     try {
-      aiRaw = callAI(wipePrompt, "You are a Google Apps Script JSON generator.");
-    } catch (err) {
-      _sendAgentMsg(source, chatId, "❌ AI System Error: " + err.message + "\n\nPlease check your API key or Tunnel connection in the Settings menu.");
-      return;
-    }
-    
-    const jsonMatch = aiRaw.match(/\{[\s\S]*\}/);
-    if (jsonMatch) {
-      try {
-        let parsed = JSON.parse(jsonMatch[0]);
-        PropertiesService.getScriptProperties().setProperty(wipeStateKey, JSON.stringify(parsed.actions));
-        _sendAgentMsg(source, chatId, parsed.message);
-      } catch (e) {
-        _sendAgentMsg(source, chatId, "❌ AI failed to formulate an action. Please try another instruction.");
-      }
-      return;
-    } else {
-      _sendAgentMsg(source, chatId, "❌ AI returned an invalid response:\n\n" + aiRaw);
-      return;
-    }
-  }
+      const rawData = bulkDataArray || _getRawDataArrayFromUrl(urlMatch[0]);
+      if (rawData && rawData.length > 1) {
+         const previewData = rawData.slice(0, 10);
+         
+         const mappingPrompt = `You are an expert data mapper. Analyze the following first 10 rows of a Google Sheet and determine the sheet type (INVENTORY, TRANSACTION, or UNSTRUCTURED).
+Source Data Preview: ${JSON.stringify(previewData)}
 
-  // 2. If user is in WIPE_PENDING state
-  const pendingWipeStr = PropertiesService.getScriptProperties().getProperty(wipeStateKey);
-  debugLog("WIPE_STATE for " + wipeStateKey + " is: " + pendingWipeStr);
-  if (pendingWipeStr) {
-    let cleanText = rawText;
-    if (cleanText.includes("Body: ")) {
-      cleanText = cleanText.split("Body: ").pop();
-    } else if (cleanText.includes("Body:")) {
-      cleanText = cleanText.split("Body:").pop();
-    }
-    const ans = cleanText.trim().toLowerCase();
-    
-    if (ans === "d") {
-      PropertiesService.getScriptProperties().deleteProperty(wipeStateKey);
-      _sendAgentMsg(source, chatId, "✅ Wipe process **cancelled**.");
-      return;
-    }
-    if (ans === "c") {
-      PropertiesService.getScriptProperties().deleteProperty(wipeStateKey);
-      _sendAgentMsg(source, chatId, "🔄 State reset. Please send a new /wipe command with your specific instructions.");
-      return;
-    }
-    
-    let actionsObj;
-    try { actionsObj = JSON.parse(pendingWipeStr); } catch(e) {}
-    
-    if (actionsObj && (ans === "a" || ans === "b")) {
-      PropertiesService.getScriptProperties().deleteProperty(wipeStateKey);
-      const actionArr = actionsObj[ans];
-      if (!actionArr || !Array.isArray(actionArr)) {
-         _sendAgentMsg(source, chatId, "❌ Opsi tidak memiliki aksi yang valid.");
+Rules:
+1. Return ONLY a valid JSON object.
+2. The "sheet_type" must be "INVENTORY", "TRANSACTION", or "UNSTRUCTURED".
+3. If the data is a complex report, pivot table, matrix, or lacks a clear single header row, set "sheet_type": "UNSTRUCTURED".
+4. If it's INVENTORY, map to these keys: item_code, item_name, category, branch, initial_stock, unit, buy_price, sell_price, status
+5. If it's TRANSACTION, map to these keys: date, type, item_code, item_name, branch, qty, buy_price, sell_price, notes, operator
+6. For standard tables, the values in your mapping must be the EXACT matching source header name from the first row.
+
+Example output for INVENTORY:
+{
+  "sheet_type": "INVENTORY",
+  "mapping": {
+    "item_code": "SKU",
+    "item_name": "Nama Produk"
+  }
+}
+
+Example output for UNSTRUCTURED:
+{
+  "sheet_type": "UNSTRUCTURED",
+  "mapping": {}
+}
+`;
+         _sendAgentMsg(source, chatId, "🧠 Menghubungi AI untuk mengklasifikasi dan memetakan kolom otomatis...");
+         const aiRaw = callAI(mappingPrompt, "You are a JSON generator.");
+         const jsonMatch = aiRaw.match(/\{[\s\S]*\}/);
+         if (!jsonMatch) throw new Error("AI gagal memetakan kolom.");
+         
+         const parsed = JSON.parse(jsonMatch[0]);
+         const sheetType = parsed.sheet_type || "INVENTORY";
+         const mapping = parsed.mapping || {};
+         
+         if (sheetType === "UNSTRUCTURED") {
+             _sendAgentMsg(source, chatId, "🧩 Tabel terdeteksi sebagai Laporan/Matriks kompleks. Memulai Mode Pemahaman Mendalam AI...");
+             if (!bulkDataArray && urlMatch) {
+                 const extractedText = _extractTextFromUrl(urlMatch[0]);
+                 if (extractedText) rawText += `\n\n[GOOGLE SHEETS CONTENT]\n` + extractedText;
+             }
+             // Do NOT return here. Fall through to the main AI processing block!
+         } else {
+             if (sheetType === "INVENTORY" && !mapping.item_name) {
+                 throw new Error("AI mengklasifikasi ini sebagai Inventory, tapi tidak bisa menemukan kolom Nama Barang.");
+             }
+             
+             const sourceHeaders = rawData[0]; // Assume first row is header for tabular data
+             // Process mapping indices
+             const headerIndices = {};
+             for (const targetField in mapping) {
+                 const sourceField = mapping[targetField];
+                 headerIndices[targetField] = sourceField ? sourceHeaders.indexOf(sourceField) : -1;
+             }
+             
+             const numRowsToCopy = rawData.length - 1;
+             _sendAgentMsg(source, chatId, `⚡ Mengimpor ${numRowsToCopy} baris data ke tab ${sheetType === "INVENTORY" ? "Inventory" : "Transaction"} secara instan...`);
+             
+             const ss = _getSpreadsheet();
+             let targetSheetName = sheetType === "INVENTORY" ? "Inventory" : "Transaction";
+             let targetSheet = ss.getSheetByName(targetSheetName);
+             if (!targetSheet) throw new Error(`Tab ${targetSheetName} tidak ditemukan.`);
+             
+             const newRows = [];
+             for (let r = 1; r < rawData.length; r++) {
+                 const row = rawData[r];
+                 if (row.join("").trim() === "") continue; // Skip empty rows
+                 
+                 if (sheetType === "INVENTORY") {
+                     const itemCode = headerIndices.item_code > -1 ? row[headerIndices.item_code] : `MIG-${Date.now()}-${r}`;
+                     const itemName = headerIndices.item_name > -1 ? row[headerIndices.item_name] : `Item ${r}`;
+                     if (!itemName || itemName.trim() === "") continue;
+                     
+                     const category = headerIndices.category > -1 ? row[headerIndices.category] : "Migrated";
+                     const branch = headerIndices.branch > -1 ? row[headerIndices.branch] : "";
+                     const initialStock = headerIndices.initial_stock > -1 ? parseFloat(row[headerIndices.initial_stock] || 0) : 0;
+                     const unit = headerIndices.unit > -1 ? row[headerIndices.unit] : "Pcs";
+                     const buyPrice = headerIndices.buy_price > -1 && row[headerIndices.buy_price] ? parseFloat(String(row[headerIndices.buy_price]).replace(/[^0-9.-]+/g,"") || 0) : 0;
+                     const sellPrice = headerIndices.sell_price > -1 && row[headerIndices.sell_price] ? parseFloat(String(row[headerIndices.sell_price]).replace(/[^0-9.-]+/g,"") || 0) : 0;
+                     const status = headerIndices.status > -1 ? row[headerIndices.status] : "Active";
+                     
+                     const uniqueId = Utilities.getUuid ? Utilities.getUuid().substring(0,8).toUpperCase() : `ID-${Date.now()}-${r}`;
+                     
+                     newRows.push([
+                         uniqueId, itemCode, itemName, category, branch, initialStock, 0, 0, "", 0, unit, buyPrice, sellPrice, status, "", new Date()
+                     ]);
+                 } else {
+                     // TRANSACTION schema: ["#", "Date & Time", "Type", "Item Code", "Item Name", "Branch", "Qty", "Stock Before", "Stock After", "Buy Price", "Sell Price", "Profit", "Notes", "Operator", "Source"]
+                     const date = headerIndices.date > -1 && row[headerIndices.date] ? row[headerIndices.date] : new Date();
+                     const type = headerIndices.type > -1 ? row[headerIndices.type] : "MIGRATION";
+                     const itemCode = headerIndices.item_code > -1 ? row[headerIndices.item_code] : "";
+                     const itemName = headerIndices.item_name > -1 ? row[headerIndices.item_name] : "";
+                     const branch = headerIndices.branch > -1 ? row[headerIndices.branch] : "";
+                     const qty = headerIndices.qty > -1 && row[headerIndices.qty] ? parseFloat(String(row[headerIndices.qty]).replace(/[^0-9.-]+/g,"") || 0) : 1;
+                     const buyPrice = headerIndices.buy_price > -1 && row[headerIndices.buy_price] ? parseFloat(String(row[headerIndices.buy_price]).replace(/[^0-9.-]+/g,"") || 0) : 0;
+                     const sellPrice = headerIndices.sell_price > -1 && row[headerIndices.sell_price] ? parseFloat(String(row[headerIndices.sell_price]).replace(/[^0-9.-]+/g,"") || 0) : 0;
+                     const profit = sellPrice - buyPrice;
+                     const notes = headerIndices.notes > -1 ? row[headerIndices.notes] : "";
+                     const operator = headerIndices.operator > -1 ? row[headerIndices.operator] : "Auto-Import";
+                     
+                     newRows.push([
+                         "", date, type, itemCode, itemName, branch, qty, 0, 0, buyPrice, sellPrice, profit, notes, operator, "System"
+                     ]);
+                 }
+             }
+             
+             if (newRows.length > 0) {
+                const lastRow = Math.max(targetSheet.getLastRow(), 1);
+                targetSheet.getRange(lastRow + 1, 1, newRows.length, newRows[0].length).setValues(newRows);
+                
+                if (sheetType === "INVENTORY") {
+                    const formulas = [];
+                    for(let nr = lastRow + 1; nr <= lastRow + newRows.length; nr++) {
+                        formulas.push([`=F${nr}+G${nr}-H${nr}`]);
+                    }
+                    targetSheet.getRange(lastRow + 1, 9, newRows.length, 1).setFormulas(formulas);
+                } else if (sheetType === "TRANSACTION") {
+                    const formulas = [];
+                    for(let nr = lastRow + 1; nr <= lastRow + newRows.length; nr++) {
+                        formulas.push([`=IF(C${nr}="","",ROW()-1)`]);
+                    }
+                    targetSheet.getRange(lastRow + 1, 1, newRows.length, 1).setFormulas(formulas);
+                }
+                
+                _sendAgentMsg(source, chatId, `✅ Sukses! ${newRows.length} baris berhasil dimigrasikan ke tab ${targetSheetName}.`);
+             } else {
+                _sendAgentMsg(source, chatId, "⚠️ Tidak ada baris data yang valid untuk diimpor.");
+             }
+             
+             return; // Stop further parsing so it doesn't try to parse transactions as chat
+         }
+
+      } else {
+         _sendAgentMsg(source, chatId, "⚠️ Google Sheets tersebut kosong.");
          return;
       }
-      _executeWipeAction(actionArr, source, chatId);
+    } catch(e) {
+      _sendAgentMsg(source, chatId, "❌ " + e.message);
       return;
     }
-    
-    // If they reply anything else while pending
-    _sendAgentMsg(source, chatId, "❌ Invalid choice. Please reply with a, b, c, or d. Or type 'd' to cancel.");
-    return;
   }
 
   const itemContext = _getInventoryContext();
@@ -367,7 +551,13 @@ Return ONLY a valid JSON object exactly like this:
   // Anti Prompt-Injection: Escape HTML/XML chars to prevent breaking out of tags
   const sanitizedText = rawText.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
-  const prompt = `You are a strict inventory data parser. Extract transactions from the employee report below.
+  const prompt = `**Task:** You are a strict inventory data parser. Extract transactions from the employee report below.
+
+**CRITICAL CONSTRAINTS - VIOLATING THESE WILL CAUSE A SYSTEM CRASH:**
+- DO NOT print "User request:", "Interpretation:", "Action:", "Sheet:", or "Range:".
+- DO NOT use bullet points or asterisks (*).
+- DO NOT think step-by-step.
+- YOU MUST START YOUR ENTIRE RESPONSE WITH THE CHARACTER '{' and END WITH '}'.
 
 <employee_report>
 ${sanitizedText}
@@ -376,97 +566,140 @@ ${sanitizedText}
 AVAILABLE ITEMS (SKU | Name | Category | CurrentStock):
 ${itemContext}
 
-RULES (CRITICAL - FOLLOW EXACTLY):
-1. **ONBOARDING PRIORITY**: If the text contains the word "/onboarding", you are processing a NEW ITEM REGISTRATION. You MUST IMMEDIATELY set:
-   - "type": "IN"
-   - "item_code": "NEW"
-   - "item_new": true
-   - "quantity": 0
-   - "new_item_name": (extract from text)
-   - "new_category": (extract from text, default "General")
-   - "new_price": (extract from text, default 0)
-   Do NOT attempt to match existing items. Ignore all other rules.
+**Rules:**
+1. UNREGISTERED ITEMS: If the user mentions an item that is NOT in the AVAILABLE ITEMS list, set "type": "UNKNOWN" and "item_code": null, and write a strict warning in 'notes'. Do NOT hallucinate it as a NEW item!
+2. FUZZY / PARTIAL MATCHING: If the user omits minor details but the main attributes match, use that item.
+3. IDENTICAL DUPLICATES: If multiple items perfectly match, pick the FIRST matching item_code.
+4. Transaction types: "IN", "OUT", "ADJUSTMENT", "CHECK", "UNKNOWN".
+5. quantity must always be a positive number.
+6. Each separate item in the report = separate transaction object.
+7. If AMBIGUOUS, set item_code="AMBIGUOUS" and write a short question in 'notes'.
+8. ANTI-FRAUD VALIDATION: If reported price differs from system price without a valid reason, set "type": "UNKNOWN". If valid reason, prefix notes with "[PRICE OVERRIDE: reason]".
 
-2. MATCH EXACTLY: "Dell Latitude 5430" must match "Dell Latitude 5430", NOT "ThinkPad". "Logitech K380" must match "Logitech K380", not any laptop.
-3. If the text does NOT contain "/onboarding", you MUST set "item_new": false.
-4. Transaction types:
-   - "IN" = receiving/restocking OR adding new product via /onboarding
-   - "OUT" = selling/dispatching/returns (laku, terjual, kirim, dibawa kurir, retur)
-   - "ADJUSTMENT" = physical count correction ONLY (e.g. "stok fisik = 50 unit")
-   - "CHECK" = stock inquiry
-   - "UNKNOWN" = unrelated to inventory
-7. quantity must always be a positive number.
-8. Each separate item in the report = separate transaction object.
-9. If the user mentions an item (e.g. "Titanium Black") and there are MULTIPLE items with the same name but different specifications (e.g. 256GB vs 512GB), you MUST set item_code="AMBIGUOUS" and write a short question in 'notes' asking the user to clarify AND explicitly instructing them to re-write their full command (e.g. "Varian mana yang dimaksud? 256GB atau 512GB? Mohon balas dengan perintah lengkap, contoh: Laku 1 unit S24 Ultra Titanium Black 256GB"). Do not guess.
+CRITICAL LOCALIZATION RULE: Detect the language of the user's input. You MUST provide the translations for the system messages below in the exact same language.
 
-Respond ONLY with a JSON object containing a "transactions" array. No other text:
+**Output Format Example:**
 {
   "transactions": [
     {
-      "type": "IN|OUT|ADJUSTMENT|CHECK|UNKNOWN",
-      "item_code": "exact SKU from list above or NEW",
-      "item_name": "exact item name from list above",
-      "quantity": 0,
+      "type": "OUT",
+      "item_code": "SKU-123",
+      "item_name": "Item Name",
+      "quantity": 1,
       "branch": null,
-      "notes": "brief notes",
+      "notes": "sold",
       "confidence": 90,
-      "item_new": false,
-      "new_item_name": null,
-      "new_category": "General",
-      "new_price": 0,
-      "ai_reasoning": "why this match"
+      "ai_reasoning": "matched"
     }
-  ]
+  ],
+  "sys_err_intent": "Translated: 🤔 I couldn't determine the intent...",
+  "sys_err_qty": "Translated: ❌ Could not detect a valid quantity for",
+  "sys_confirm": "Translated: 🤔 AI is {conf}% confident about {name}..."
 }`;
 
   let parsedList;
+  let rootParsed = {};
   let aiRaw = "";
-  debugLog("Sending to Groq AI...");
-  try {
-    aiRaw = callAI(prompt, null);
-    debugLog("AI Raw Output: " + aiRaw);
-    const jsonMatch = aiRaw.match(/\[[\s\S]*\]|\{[\s\S]*\}/);
-    if (jsonMatch) {
-      let parsed = JSON.parse(jsonMatch[0]);
-      // Unwrap if AI returned {transactions: [...]} or {data: [...]} etc.
-      if (!Array.isArray(parsed) && typeof parsed === 'object') {
-        const keys = Object.keys(parsed);
-        for (const key of keys) {
-          if (Array.isArray(parsed[key])) {
-            parsed = parsed[key];
-            break;
+  debugLog("Sending to AI...");
+  // --- METODE BERFIKIR 2X (SMART LOOP QA) ---
+  let maxAttempts = 3;
+  let attempt = 1;
+  let currentPrompt = prompt;
+  let success = false;
+  
+  while (attempt <= maxAttempts && !success) {
+    try {
+      debugLog("Sending to AI (Attempt " + attempt + ")...");
+      aiRaw = callAI(currentPrompt, null);
+      debugLog("[ROUTING] AI Raw Output (Attempt " + attempt + "): " + aiRaw);
+      
+      let parsed = AIAgent._extractJson(aiRaw);
+      if (parsed) {
+        rootParsed = parsed || {};
+        if (!Array.isArray(parsed) && typeof parsed === 'object') {
+          const keys = Object.keys(parsed);
+          for (const key of keys) {
+            if (Array.isArray(parsed[key])) {
+              parsed = parsed[key];
+              break;
+            }
           }
         }
+        parsedList = Array.isArray(parsed) ? parsed : [parsed];
+        
+        // SELF VERIFICATION
+        let verifySys = "Anda adalah auditor QA internal. Verifikasi apakah JSON ini sudah memenuhi instruksi pengguna dengan tepat. Jawab HANYA dengan kata 'SUDAH' jika benar. Jika ada kesalahan logika, salah qty, salah nama barang, atau salah klasifikasi IN/OUT, sebutkan detail kesalahannya agar AI utama bisa memperbaiki.";
+        let verifyPrompt = "\nInstruksi Pengguna: \"" + rawText + "\"\n\nJSON yang dihasilkan:\n" + JSON.stringify(parsedList) + "\n\nApakah JSON ini sudah tepat sasaran?";
+        let verifyResult = callAI(verifyPrompt, verifySys);
+        
+        if (verifyResult.trim().toUpperCase().startsWith("SUDAH") || attempt === maxAttempts) {
+           if (attempt === maxAttempts && !verifyResult.trim().toUpperCase().startsWith("SUDAH")) {
+               debugLog("⚠️ Max attempts reached, forcing execution. Last feedback: " + verifyResult);
+           } else {
+               debugLog("✅ Self-Verification Lolos pada percobaan ke-" + attempt);
+           }
+           success = true;
+           break;
+        } else {
+           debugLog("❌ Auditor Feedback (Attempt " + attempt + "): " + verifyResult);
+           currentPrompt = prompt + "\n\n[PERINGATAN DARI AUDITOR QA (Percobaan " + attempt + ")]:\n" + verifyResult + "\n\nTolong evaluasi kesalahan Anda dan perbaiki JSON Anda berdasarkan feedback di atas!";
+           attempt++;
+        }
+      } else {
+        throw new Error("No JSON block found");
       }
-      parsedList = Array.isArray(parsed) ? parsed : [parsed];
-    } else {
-      throw new Error("No JSON block found");
+    } catch (err) {
+       if (attempt === maxAttempts) {
+           // Rethrow down to the main catch block
+           throw err;
+       }
+       debugLog("❌ Parsing Error (Attempt " + attempt + "): " + err.message);
+       currentPrompt = prompt + "\n\n[ERROR FORMATTING (Percobaan " + attempt + ")]:\n" + err.message + "\n\nPastikan format balasan HANYA berisi struktur JSON yang valid.";
+       attempt++;
     }
+  }
+  
+  try {
+     if (!success && !parsedList) {
+         throw new Error("Gagal setelah " + maxAttempts + " percobaan.");
+     }
   } catch (err) {
     Logger.log("AI error: " + err);
     debugLog("AI error: " + err);
-    const errStr = err.toString().toLowerCase();
-    
-    if (errStr.includes("failed") || errStr.includes("unauthorized") || errStr.includes("api key") || errStr.includes("key not valid") || errStr.includes("provider")) {
-      if (chatId) _sendAgentMsg(source, chatId,
-        "⚠️ AI System is not configured properly or API Key is invalid. Please contact the Admin to set the API Key in the Agent Settings menu."
-      );
-      return;
+    debugLog("AI Error: " + err.message);
+    if (chatId) {
+      if (!aiRaw) {
+         _sendAgentMsg(source, chatId, `❌ AI Provider Error: ${err.message}`);
+      } else {
+         _sendAgentMsg(source, chatId, `❌ Could not parse AI response. \n\nRAW AI OUTPUT:\n${aiRaw}\n\nPlease try a clearer format.`);
+      }
     }
-    
-    if (chatId) _sendAgentMsg(source, chatId,
-      `❌ Could not parse AI response. \n\nRAW AI OUTPUT:\n${aiRaw}\n\nPlease try a clearer format:\n• "received 10 [item name]"`
-    );
     return;
   }
 
   debugLog("Parsed " + parsedList.length + " transactions from AI");
+  
+  if (parsedList.length === 0) {
+    const errMsg = rootParsed.sys_err_intent || "🤔 I couldn't determine the intent of this part of your report.\n\nPlease clarify: is this a Stock IN, Stock OUT, or Stock Adjustment?";
+    if (chatId) _sendAgentMsg(source, chatId, errMsg);
+    return;
+  }
+
   for (let idx = 0; idx < parsedList.length; idx++) {
     const parsed = parsedList[idx];
     debugLog("Processing tx #" + (idx+1) + ": type=" + parsed.type + " code=" + parsed.item_code + " name=" + parsed.item_name + " qty=" + parsed.quantity + " conf=" + parsed.confidence);
     if (parsed.type === "UNKNOWN") {
+      const errMsg = rootParsed.sys_err_intent || "🤔 I couldn't determine the intent of this part of your report.\n\nPlease clarify: is this a Stock IN, Stock OUT, or Stock Adjustment?";
+      
+      // Fraud Detection Hook
+      if (parsed.notes && parsed.notes.toUpperCase().includes("FRAUD WARNING")) {
+          _logSecurityThreat(senderName, "Price Manipulation", rawText, parsed.notes);
+          if (chatId) _sendAgentMsg(source, chatId, `🚨 ${parsed.notes}`);
+          continue;
+      }
+      
       if (chatId) _sendAgentMsg(source, chatId,
-        `🤔 I couldn't determine the intent of this part of your report.\n\nAI Note: ${parsed.ai_reasoning || "Not specified"}\n\nPlease clarify: is this a Stock IN, Stock OUT, or Stock Adjustment?`
+        `${errMsg}\n\nAI Note: ${parsed.ai_reasoning || "Not specified"}`
       );
       continue;
     }
@@ -477,19 +710,22 @@ Respond ONLY with a JSON object containing a "transactions" array. No other text
     }
 
     if (parsed.quantity <= 0 && parsed.type !== "ADJUSTMENT" && !(parsed.type === "IN" && (parsed.item_new === true || parsed.item_new === "true"))) {
-      if (chatId) _sendAgentMsg(source, chatId, `❌ Could not detect a valid quantity for ${parsed.item_name || parsed.new_item_name || "item"}.`);
+      const errQty = rootParsed.sys_err_qty || "❌ Could not detect a valid quantity for";
+      if (chatId) _sendAgentMsg(source, chatId, `${errQty} ${parsed.item_name || parsed.new_item_name || "item"}.`);
       continue;
     }
 
     if (parsed.confidence < 75) {
       if (chatId) {
+        const confTemplate = rootParsed.sys_confirm || "🤔 AI is {conf}% confident about {name}. Please confirm:\nType: {type}\nQty: {qty}\n\nReply YES to confirm.";
+        const msg = confTemplate
+          .replace("{conf}", parsed.confidence)
+          .replace("{name}", parsed.item_name || parsed.new_item_name)
+          .replace("{type}", parsed.type)
+          .replace("{qty}", parsed.quantity);
+          
         CacheService.getUserCache().put("pending_" + chatId, JSON.stringify({ parsed, rawText, senderName, source }), 300);
-        _sendAgentMsg(source, chatId,
-          `🤔 AI is ${parsed.confidence}% confident about ${parsed.item_name}. Please confirm:\n\n` +
-          `Type: <b>${parsed.type}</b>\n` +
-          `Qty: <b>${parsed.quantity}</b>\n\n` +
-          `Reply <b>YES</b> to confirm.`
-        );
+        _sendAgentMsg(source, chatId, msg);
       }
       continue;
     }
@@ -518,25 +754,8 @@ function _executeAgentTransaction(chatId, parsed, senderName, source, rawText) {
     debugLog("_findItem result: " + (item ? "FOUND row=" + item.row + " name=" + item.name + " stock=" + item.stock : "NULL"));
 
   if (!item) {
-    if (parsed.item_new === true || parsed.item_new === "true") {
-      if (rawText.toLowerCase().includes("/onboarding")) {
-        item = _createNewItemRow(parsed);
-        if (chatId) _sendAgentMsg(source, chatId, `✅ New item added: *${item.name}* (${item.code}). Category: ${parsed.new_category}, Price: Rp${parsed.new_price}. Continuing transaction...`);
-      } else {
-        if (chatId) _sendAgentMsg(source, chatId, `❌ **Transaction Denied:** You mentioned item "${parsed.new_item_name}" which is not registered. If this is a new item, you must use the /onboarding keyword. If this is an existing item, please correct your spelling (typo).`);
-        return;
-      }
-    } else if (parsed.item_name) {
-      if (chatId) _sendAgentMsg(source, chatId, `❌ Item "${parsed.item_name}" is not found in the database.`);
-      return;
-    } else {
-      return;
-    }
-  } else {
-    // If item exists, but AI thought it was new, or user used /onboarding but it matched an existing item.
-    if (rawText.toLowerCase().includes("/onboarding") && (parsed.item_new === true || parsed.item_new === "true")) {
-      if (chatId) _sendAgentMsg(source, chatId, `⚠️ You used /onboarding for "${parsed.item_name}", but this item ALREADY EXISTS in the database with code ${item.code}. Item creation cancelled. Continuing stock update...`);
-    }
+    if (chatId) _sendAgentMsg(source, chatId, `❌ **Transaction Denied:** Item "${parsed.item_name || 'Tidak diketahui'}" is not registered in the database.\\n\\nPlease ask the Admin to add it via the Google Sheets menu (Smart Inventory ➔ Registrasi Barang Baru).`);
+    return;
   }
 
   const stockBefore = item.stock;
@@ -594,13 +813,13 @@ function _executeAgentTransaction(chatId, parsed, senderName, source, rawText) {
   }
 
   // Notify admin
-  const adminTgId = PropertiesService.getScriptProperties().getProperty("TG_ADMIN_ID");
+  const adminTgId = _getScriptProps().getProperty("TG_ADMIN_ID");
   if (adminTgId && adminTgId !== chatId) {
     _sendTelegram(adminTgId, `📢 <b>New Report from ${senderName} via ${source}</b>\n\n` + proof.message);
   }
 
   // Email admin
-  const adminEmail = PropertiesService.getScriptProperties().getProperty("ADMIN_EMAIL");
+  const adminEmail = _getScriptProps().getProperty("ADMIN_EMAIL");
   if (adminEmail) {
     _sendEmailNotification(adminEmail,
       `🚨 New Transaction via ${source}`,
@@ -617,7 +836,11 @@ function _executeAgentTransaction(chatId, parsed, senderName, source, rawText) {
 
   } catch (e) {
     Logger.log("Lock or Execution Error in _executeAgentTransaction: " + e.message);
-    if (chatId) _sendAgentMsg(source, chatId, "❌ System is busy (Concurrency limit). Please repeat your report in a few seconds.");
+    if (e.message.toLowerCase().includes("lock")) {
+      if (chatId) _sendAgentMsg(source, chatId, "❌ System is busy (Concurrency limit). Please repeat your report in a few seconds.");
+    } else {
+      throw e;
+    }
   } finally {
     lock.releaseLock();
   }
@@ -751,6 +974,27 @@ function _buildStockCheckResult(query) {
   return msg;
 }
 
+
+function _logSecurityThreat(operatorName, threatType, originalMessage, aiNotes) {
+  try {
+    const ss = _getSpreadsheet();
+    // Use string "Security Audit" matching Setup.js SHEETS.SECURITY
+    let sh = ss.getSheetByName("Security Audit");
+    if (sh) {
+       sh.appendRow([
+         new Date(),
+         operatorName,
+         threatType,
+         originalMessage,
+         aiNotes
+       ]);
+       debugLog(`SECURITY THREAT LOGGED: ${operatorName} - ${threatType}`);
+    }
+  } catch (e) {
+    debugLog("Failed to log security threat: " + e.message);
+  }
+}
+
 // ─── WELCOME MESSAGE ─────────────────────────────────────────
 function _buildWelcomeMessage(name) {
   return (
@@ -772,6 +1016,11 @@ function _buildWelcomeMessage(name) {
     `• /stock [item] — same as /check\n` +
     `• /dashboard — view summary\n` +
     `• /help — show this message\n\n` +
+    `🛡️ <b>Admin Commands:</b>\n` +
+    `• /users — show whitelist\n` +
+    `• /allow [ID] — grant access\n` +
+    `• /block [ID] — revoke access\n` +
+    `• /public_mode [on/off] — toggle security\n\n` +
     `Just type naturally — AI will understand! 🚀`
   );
 }
@@ -785,13 +1034,14 @@ function _sendAgentMsg(source, recipient, text) {
   } else if (source === "WhatsApp") {
     _sendWhatsApp(recipient, text);
   } else if (source === "Email") {
+    if (text.startsWith("⏳") || text.startsWith("🧠") || text.startsWith("🧩") || text.startsWith("⚡")) return;
     const htmlBody = text.replace(/\n/g, "<br>");
-    _sendEmailNotification(recipient, "🤖 AI Inventory Notification", htmlBody);
+    _sendEmailNotification(recipient, "AI Inventory Notification", htmlBody);
   }
 }
 
 function _sendTelegram(chatId, text) {
-  const token = PropertiesService.getScriptProperties().getProperty("TG_TOKEN");
+  const token = _getScriptProps().getProperty("TG_TOKEN");
   if (!token || !chatId) return;
   try {
     const payload = {
@@ -809,7 +1059,7 @@ function _sendTelegram(chatId, text) {
 }
 
 function _sendWhatsApp(phone, text) {
-  const props = PropertiesService.getScriptProperties();
+  const props = _getScriptProps();
   const phoneId = props.getProperty("WA_PHONE_ID");
   const token   = props.getProperty("WA_TOKEN");
   
@@ -843,7 +1093,7 @@ function _sendWhatsApp(phone, text) {
       GmailApp.sendEmail(recipient, subject, body, { htmlBody: htmlBody });
     } catch (e) {
       debugLog("EMAIL FAILED TO SEND: " + e.message);
-      const adminId = PropertiesService.getScriptProperties().getProperty("ADMIN_CHAT_ID");
+      const adminId = _getScriptProps().getProperty("ADMIN_CHAT_ID");
       if (adminId) {
         _sendTelegram(adminId, `⚠️ <b>SYSTEM ALERT</b> ⚠️\n\nGagal mengirim email balasan ke ${recipient} karena limit kuota Gmail.\n\n<b>Status Sistem:</b> Perintah pengguna telah diproses oleh AI, namun balasan tertahan.`);
       }
@@ -852,7 +1102,7 @@ function _sendWhatsApp(phone, text) {
 
 // ─── GEMINI AI ────────────────────────────────────────────────
 function _callGemini(prompt, apiKey) {
-  const url  = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+  const url  = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
   const resp = UrlFetchApp.fetch(url, {
     method: "post",
     contentType: "application/json",
@@ -894,7 +1144,7 @@ function doGet(e) {
       result += "1. _getSpreadsheet: SUCCESS. ID=" + ss.getId() + "\n";
       const sheet = ss.getSheetByName("DebugLogs");
       if (sheet) result += "2. DebugLogs Sheet: SUCCESS.\n";
-      const id = PropertiesService.getScriptProperties().getProperty("SHEET_ID");
+      const id = _getScriptProps().getProperty("SHEET_ID");
       result += "3. SHEET_ID in Properties: " + id + "\n";
       const data = sheet.getDataRange().getValues();
       const lastLogs = data.slice(0, 15).map(r => r.join(" | ")).join("\n");
@@ -910,7 +1160,7 @@ function doGet(e) {
   if (e.parameter["action"] === "set_sheet_id") {
     const id = e.parameter["id"];
     if (id) {
-      PropertiesService.getScriptProperties().setProperty("SHEET_ID", id);
+      _getScriptProps().setProperty("SHEET_ID", id);
       return ContentService.createTextOutput("SHEET_ID successfully set to: " + id);
     }
     return ContentService.createTextOutput("Missing id parameter");
@@ -918,7 +1168,7 @@ function doGet(e) {
 
   if (e.parameter["action"] === "register_webhook") {
     try {
-      const props = PropertiesService.getScriptProperties();
+      const props = _getScriptProps();
       const token = props.getProperty("TG_TOKEN");
       if (!token) return ContentService.createTextOutput("No TG_TOKEN");
       const secret = props.getProperty("WEBHOOK_SECRET");
@@ -944,7 +1194,7 @@ function doGet(e) {
 // ─── WEEKLY AI SUMMARY (CRON) ───────────────────────────────
 function generateWeeklySummary() {
   try {
-    const adminId = PropertiesService.getScriptProperties().getProperty("ADMIN_CHAT_ID");
+    const adminId = _getScriptProps().getProperty("ADMIN_CHAT_ID");
     if (!adminId) return;
 
     const txSh = _getSheet(SHEETS.TRANSACTIONS);
@@ -989,7 +1239,7 @@ function generateWeeklySummary() {
 // ─── WIPE EXECUTION ──────────────────────────────────────────
 function _executeWipeAction(actionArr, source, chatId) {
   try {
-    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const ss = _getSpreadsheet();
     let executedCount = 0;
     
     for (let act of actionArr) {
@@ -1033,5 +1283,223 @@ function _executeWipeAction(actionArr, source, chatId) {
     }
   } catch (e) {
     _sendAgentMsg(source, chatId, "❌ **FAILED**: " + e.message);
+  }
+}
+
+// ─── FORMAT EXECUTION ──────────────────────────────────────────
+function _executeFormatAction(actionArr, source, chatId) {
+  try {
+    const ss = _getSpreadsheet();
+    let executedCount = 0;
+    
+    let actionsToRun = [];
+    for (let act of actionArr) {
+      let sheetName = String(act.sheet).toUpperCase();
+      if (sheetName === "ALL" || sheetName === "SEMUA") {
+        const allSheets = ss.getSheets();
+        for (let s of allSheets) {
+          actionsToRun.push(Object.assign({}, act, { sheet: s.getName() }));
+        }
+      } else {
+        actionsToRun.push(act);
+      }
+    }
+    
+    for (let act of actionsToRun) {
+      const sh = ss.getSheetByName(act.sheet);
+      if (!sh) continue;
+      
+      try {
+        if (act.cmd === "RESET_FORMAT") {
+          let fullRange = sh.getRange(1, 1, sh.getMaxRows(), sh.getMaxColumns());
+          
+          // Fase 1: Format Visual pada SELURUH sheet
+          fullRange.breakApart();
+          fullRange.clearFormat(); 
+          fullRange.clearDataValidations();
+          fullRange.setBackground(null);
+          fullRange.setFontColor("#000000");
+          sh.clearConditionalFormatRules();
+          
+          let bandings = sh.getBandings();
+          for (let i = 0; i < bandings.length; i++) {
+            bandings[i].remove();
+          }
+
+          // Fase 2: Menghapus Sel Error Tanpa Merusak Rumus Sehat (Menggunakan RangeList)
+          // Gunakan getDataRange() untuk mencari error agar lebih cepat (tidak memproses 1000+ baris kosong)
+          let dataRange = sh.getDataRange();
+          if (dataRange) {
+            let displayValues = dataRange.getDisplayValues();
+            let errorCells = [];
+            
+            let getColLetter = (c) => {
+               let temp, letter = '';
+               while (c > 0) {
+                 temp = (c - 1) % 26;
+                 letter = String.fromCharCode(temp + 65) + letter;
+                 c = (c - temp - 1) / 26;
+               }
+               return letter;
+            };
+
+            for (let r = 0; r < displayValues.length; r++) {
+              for (let c = 0; c < displayValues[r].length; c++) {
+                if (String(displayValues[r][c]).indexOf("#") === 0) {
+                  errorCells.push(`${getColLetter(c + 1)}${r + 1}`);
+                }
+              }
+            }
+            
+            if (errorCells.length > 0) {
+              const chunkSize = 400;
+              for (let i = 0; i < errorCells.length; i += chunkSize) {
+                sh.getRangeList(errorCells.slice(i, i + chunkSize)).clearContent();
+              }
+            }
+          }
+          let maxCols = sh.getMaxColumns();
+          if (maxCols > 0) sh.setColumnWidths(1, maxCols, 100);
+          
+          let maxRows = sh.getMaxRows();
+          if (maxRows > 0) sh.setRowHeights(1, maxRows, 21);
+          executedCount++;
+        }
+        else if (act.cmd === "REPAIR_FORMULA") {
+          let maxRows = sh.getMaxRows();
+          let maxCols = sh.getMaxColumns();
+          if (maxRows >= 2 && maxCols > 0) {
+             let headers = sh.getRange(1, 1, 1, maxCols).getValues()[0];
+             let colCurrentStock = headers.findIndex(h => String(h).toLowerCase().includes("current stock")) + 1;
+             let colMinStock = headers.findIndex(h => String(h).toLowerCase().includes("min stock")) + 1;
+             let colStatus = headers.findIndex(h => String(h).toLowerCase() === "status") + 1;
+             let colQR = headers.findIndex(h => String(h).toLowerCase().includes("qr")) + 1;
+             let colUpdate = headers.findIndex(h => String(h).toLowerCase().includes("update")) + 1;
+             
+             let colInit = headers.findIndex(h => String(h).toLowerCase().includes("initial")) + 1 || 6;
+             let colIn = headers.findIndex(h => String(h).toLowerCase().includes("in")) + 1 || 7;
+             let colOut = headers.findIndex(h => String(h).toLowerCase().includes("out")) + 1 || 8;
+
+             let getColLetter = (col) => {
+               let temp, letter = '';
+               while (col > 0) {
+                 temp = (col - 1) % 26;
+                 letter = String.fromCharCode(temp + 65) + letter;
+                 col = (col - temp - 1) / 26;
+               }
+               return letter;
+             };
+
+             let initL = getColLetter(colInit);
+             let inL = getColLetter(colIn);
+             let outL = getColLetter(colOut);
+             let currL = colCurrentStock > 0 ? getColLetter(colCurrentStock) : "I";
+             let minL = colMinStock > 0 ? getColLetter(colMinStock) : "J";
+
+             let numRows = maxRows - 1;
+             
+             let currentStockFormulas = [];
+             let statusFormulas = [];
+             let qrFormulas = [];
+             let updateFormulas = [];
+
+             for (let r = 2; r <= maxRows; r++) {
+                if (colCurrentStock > 0) currentStockFormulas.push([`=IF(B${r}="","",${initL}${r}+${inL}${r}-${outL}${r})`]);
+                if (colStatus > 0) statusFormulas.push([`=IF(B${r}="","",IF(${currL}${r}=0,"🔴 OUT OF STOCK",IF(${currL}${r}<=${minL}${r}/2,"🟠 CRITICAL",IF(${currL}${r}<=${minL}${r},"🟡 LOW STOCK","🟢 IN STOCK"))))`]);
+                if (colQR > 0) qrFormulas.push([`=IF(B${r}="","",IMAGE("https://quickchart.io/qr?text=" & B${r} & "&size=100", 4, 100, 100))`]);
+                if (colUpdate > 0) updateFormulas.push([`=IF(B${r}="","",TEXT(NOW(),"dd/MM/yyyy HH:mm"))`]);
+             }
+             
+             // Batch update formulas (konsep yang diambil dari REST API v4 batchUpdate tapi native GAS)
+             if (colCurrentStock > 0) sh.getRange(2, colCurrentStock, numRows, 1).setFormulas(currentStockFormulas);
+             if (colStatus > 0) sh.getRange(2, colStatus, numRows, 1).setFormulas(statusFormulas);
+             if (colQR > 0) sh.getRange(2, colQR, numRows, 1).setFormulas(qrFormulas);
+             if (colUpdate > 0) sh.getRange(2, colUpdate, numRows, 1).setFormulas(updateFormulas);
+          }
+          executedCount++;
+        }
+        else if (act.cmd === "TIDY_UP") {
+          // Sweep all columns
+          let numCols = sh.getMaxColumns();
+          if (numCols > 0) {
+            sh.autoResizeColumns(1, numCols);
+          }
+          // Wrap text & vertical align on data range
+          let dataRange = sh.getDataRange();
+          if (dataRange) {
+            dataRange.setWrap(true);
+            dataRange.setVerticalAlignment("middle");
+          }
+          executedCount++;
+        }
+        else if (act.cmd === "SET_COLUMN_WIDTH") {
+          let startCol = parseInt(act.startCol) || 1;
+          let width = parseInt(String(act.width).replace(/\D/g, '')) || 100;
+          let numCols = act.numCols;
+          if (!numCols || typeof numCols === 'string') numCols = sh.getMaxColumns() - startCol + 1;
+          if (numCols > 0) {
+            sh.setColumnWidths(startCol, numCols, width);
+            executedCount++;
+          }
+        }
+        else if (act.cmd === "AUTO_RESIZE_COLUMNS") {
+          let startCol = parseInt(act.startCol) || 1;
+          let numCols = act.numCols;
+          if (!numCols || typeof numCols === 'string') numCols = sh.getMaxColumns() - startCol + 1;
+          if (numCols > 0) {
+            // Because autoResizeColumns with multiple columns might be slower, try catch it
+            sh.autoResizeColumns(startCol, numCols);
+            executedCount++;
+          }
+        }
+        else if (act.cmd === "SET_ROW_HEIGHT") {
+          let startRow = parseInt(act.startRow) || 1;
+          let height = parseInt(String(act.height).replace(/\D/g, '')) || 21;
+          let numRows = act.numRows;
+          if (!numRows || typeof numRows === 'string') numRows = sh.getMaxRows() - startRow + 1;
+          if (numRows > 0) {
+            sh.setRowHeights(startRow, numRows, height);
+            executedCount++;
+          }
+        }
+        else if ((act.cmd === "SET_BACKGROUND_COLOR" || act.cmd === "SET_BACKGROUND") && act.range && act.color) {
+          sh.getRange(act.range).setBackground(act.color);
+          executedCount++;
+        }
+        else if (act.cmd === "SET_FONT_WEIGHT" && act.range && act.weight) {
+          sh.getRange(act.range).setFontWeight(act.weight);
+          executedCount++;
+        }
+        else if (act.cmd === "SET_FONT_COLOR" && act.range && act.color) {
+          sh.getRange(act.range).setFontColor(act.color);
+          executedCount++;
+        }
+        else if (act.cmd === "SET_HORIZONTAL_ALIGNMENT" && act.range && act.alignment) {
+          sh.getRange(act.range).setHorizontalAlignment(act.alignment);
+          executedCount++;
+        }
+        else if (act.cmd === "CLEAR_CONTENT" && act.range) {
+          sh.getRange(act.range).clearContent();
+          executedCount++;
+        }
+      } catch (e) {
+        // Skip invalid formats silently
+      }
+    }
+    
+    let result = { success: false, message: "", count: executedCount };
+    if (executedCount > 0) {
+      result.success = true;
+      result.message = `✅ **FORMAT SUCCESSFUL**: ${executedCount} format actions have been applied.`;
+      if (source) _sendAgentMsg(source, chatId, result.message);
+    } else {
+      result.message = "⚠️ Tidak ada format yang dieksekusi. Mungkin format data tidak valid.";
+      if (source) _sendAgentMsg(source, chatId, result.message);
+    }
+    return result;
+  } catch (e) {
+    let errMsg = "❌ **FORMAT FAILED**: " + e.message;
+    if (source) _sendAgentMsg(source, chatId, errMsg);
+    return { success: false, message: errMsg, count: 0 };
   }
 }

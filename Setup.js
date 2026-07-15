@@ -89,58 +89,6 @@ const COLORS = {
 };
 
 // ─── ENTRY POINT — runs on every open ───────────────────────
-function onOpen() {
-  const props = PropertiesService.getScriptProperties();
-  const isActivated = props.getProperty("LICENSE_ACTIVATED") === "true";
-
-  if (!isActivated) {
-    // Only show license activation — no other options visible
-    SpreadsheetApp.getUi()
-      .createMenu("🔐 License Activation Required")
-      .addItem("✨ Enter License Key to Unlock", "showLicenseDialog")
-      .addSeparator()
-      .addItem("ℹ️  About This Software", "showAbout")
-      .addToUi();
-
-    // Show welcome/locked banner
-    _showLockedSidebar();
-  } else {
-    // Full menu — only shown after valid license
-    _buildFullMenu();
-  }
-}
-
-function _buildFullMenu() {
-  SpreadsheetApp.getUi()
-    .createMenu("📦 Inventory System")
-    .addItem("🏠 Go to Dashboard",           "navDashboard")
-    .addItem("🔧 Fix Background Error (Klik 1x)", "forceSaveSheetId")
-    .addItem("🔧 Register Webhook Telegram", "forceRegisterWebhook")
-    .addSeparator()
-    .addItem("➕ Stock In",                   "dialogStockIn")
-    .addItem("➖ Stock Out",                  "dialogStockOut")
-    .addItem("🔧 Stock Adjustment",           "dialogAdjustment")
-    .addSeparator()
-    .addItem("📦 View Inventory",             "navInventory")
-    .addItem("🔄 View Transactions",          "navTransactions")
-    .addItem("🏢 Manage Branches",            "navBranches")
-    .addSeparator()
-    .addItem("🔄 Refresh Dashboard",          "refreshDashboardClick")
-    .addItem("📊 Recalculate All Status",     "recalcAllStatus")
-    .addItem("🛠️ AI Smart Repair",             "showRepairDialog")
-    .addSeparator()
-    .addItem("📱 AI Config / Agent Settings", "showAgentSettings")
-    .addItem("💬 Open Chat Simulator", "simulateChat")
-    .addItem("📨 Manual Poll Emails", "pollEmails")
-    .addSeparator()
-    .addItem("🔑 License Manager (Admin)",    "showLicenseManager")
-    .addItem("🐛 Debug Error Message",        "debugErrorsUI")
-    .addItem("⚙️  Run Automated Tests",       "runAllTests")
-    .addSeparator()
-    .addItem("ℹ️  About",                     "showAbout")
-    .addToUi();
-}
-
 // ─── LICENSE DIALOG ──────────────────────────────────────────
 function showLicenseDialog() {
   const html = HtmlService.createHtmlOutput(`
@@ -289,6 +237,12 @@ function _activateSuccess(key, isAdmin) {
   props.setProperty("LICENSE_KEY", key);
   props.setProperty("IS_ADMIN", isAdmin ? "true" : "false");
   props.setProperty("ACTIVATED_AT", new Date().toISOString());
+  
+  // Automagically bind the Sheet ID during activation so the user doesn't have to do it manually!
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  if (ss) {
+    props.setProperty("SHEET_ID", ss.getId());
+  }
 
   // Automatically connect the customer's Gmail by creating a background trigger
   try {
@@ -302,7 +256,7 @@ function _activateSuccess(key, isAdmin) {
   setupSystem();
 
   // Build the full menu immediately
-  _buildFullMenu();
+  onOpen();
 }
 
 // ─── LICENSE VALIDATION (CRYPTOGRAPHIC) ─────────────────────
@@ -409,10 +363,10 @@ function _setupBranchesSheet() {
 }
 
 // ─── INVENTORY SHEET ─────────────────────────────────────────
-function _setupInventorySheet() {
+function _setupInventorySheet(isFormatOnly = false) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   let sh = ss.getSheetByName(SHEETS.INVENTORY);
-  if (sh) sh.clearContents(); else sh = ss.insertSheet(SHEETS.INVENTORY);
+  if (sh && !isFormatOnly) sh.clearContents(); else if (!sh) sh = ss.insertSheet(SHEETS.INVENTORY);
 
   const headers = [
     "ID", "Item Code", "Item Name", "Category", "Branch",
@@ -422,24 +376,31 @@ function _setupInventorySheet() {
   _applyHeaders(sh, headers);
 
   // Formulas for rows 2–500
-  for (let r = 2; r <= 500; r++) {
-    sh.getRange(r, 9).setFormula(`=IF(B${r}="","",F${r}+G${r}-H${r})`);
-    sh.getRange(r, 14).setFormula(
-      `=IF(B${r}="","",IF(I${r}=0,"🔴 OUT OF STOCK",IF(I${r}<=J${r}/2,"🟠 CRITICAL",IF(I${r}<=J${r},"🟡 LOW STOCK","🟢 IN STOCK"))))`
-    );
-    sh.getRange(r, 15).setFormula(`=IF(B${r}="","",IMAGE("https://quickchart.io/qr?text=" & B${r} & "&size=100", 4, 100, 100))`);
-    sh.getRange(r, 16).setFormula(`=IF(B${r}="","",TEXT(NOW(),"dd/MM/yyyy HH:mm"))`);
+  if (!isFormatOnly) {
+    const f9 = [], f14 = [], f15 = [], f16 = [];
+    for (let r = 2; r <= 500; r++) {
+      f9.push([`=IF(B${r}="","",F${r}+G${r}-H${r})`]);
+      f14.push([`=IF(B${r}="","",IF(I${r}=0,"🔴 OUT OF STOCK",IF(I${r}<=J${r}/2,"🟠 CRITICAL",IF(I${r}<=J${r},"🟡 LOW STOCK","🟢 IN STOCK"))))`]);
+      f15.push([`=IF(B${r}="","",IMAGE("https://quickchart.io/qr?text=" & B${r} & "&size=100", 4, 100, 100))`]);
+      f16.push([`=IF(B${r}="","",TEXT(NOW(),"dd/MM/yyyy HH:mm"))`]);
+    }
+    sh.getRange(2, 9, 499, 1).setFormulas(f9);
+    sh.getRange(2, 14, 499, 1).setFormulas(f14);
+    sh.getRange(2, 15, 499, 1).setFormulas(f15);
+    sh.getRange(2, 16, 499, 1).setFormulas(f16);
   }
 
   // Sample data
-  const sampleItems = [
-    [1, "ELE-001", "iPhone 15 Pro Max 256GB", "Electronics", "Head Office", 0, 50, 5, "", 5, "unit", 1000, 1199, "", "", ""],
-    [2, "ELE-002", "Samsung Galaxy S24 Ultra", "Electronics", "Head Office", 0, 30, 2, "", 5, "unit", 900, 1299, "", "", ""],
-    [3, "ELE-003", "MacBook Pro M3 14-inch",  "Electronics", "Head Office", 0, 15, 1, "", 3, "unit", 1500, 1999, "", "", ""],
-    [4, "FAS-001", "Nike Air Force 1 07",     "Fashion",     "Head Office", 0, 100, 20, "", 20, "pair", 70, 110, "", "", ""],
-    [5, "GRO-001", "Mineral Water 600ml (Box)", "Groceries", "Head Office", 0, 500, 498, "", 20, "box", 8, 12, "", "", ""],
-  ];
-  sampleItems.forEach((row, i) => sh.getRange(i + 2, 1, 1, row.length).setValues([row]));
+  if (!isFormatOnly) {
+    const sampleItems = [
+      [1, "ELE-001", "iPhone 15 Pro Max 256GB", "Electronics", "Head Office", 0, 50, 5, "", 5, "unit", 1000, 1199, "", "", ""],
+      [2, "ELE-002", "Samsung Galaxy S24 Ultra", "Electronics", "Head Office", 0, 30, 2, "", 5, "unit", 900, 1299, "", "", ""],
+      [3, "ELE-003", "MacBook Pro M3 14-inch",  "Electronics", "Head Office", 0, 15, 1, "", 3, "unit", 1500, 1999, "", "", ""],
+      [4, "FAS-001", "Nike Air Force 1 07",     "Fashion",     "Head Office", 0, 100, 20, "", 20, "pair", 70, 110, "", "", ""],
+      [5, "GRO-001", "Mineral Water 600ml (Box)", "Groceries", "Head Office", 0, 500, 498, "", 20, "box", 8, 12, "", "", ""],
+    ];
+    sampleItems.forEach((row, i) => sh.getRange(i + 2, 1, 1, row.length).setValues([row]));
+  }
 
   [40, 100, 220, 110, 130, 80, 80, 80, 100, 90, 70, 110, 110, 120, 100, 130].forEach((w, i) => sh.setColumnWidth(1 + i, w));
   sh.getRange("F:J").setNumberFormat("#,##0");
@@ -473,16 +434,20 @@ function _setupInventorySheet() {
 }
 
 // ─── TRANSACTIONS SHEET ──────────────────────────────────────
-function _setupTransactionsSheet() {
+function _setupTransactionsSheet(isFormatOnly = false) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   let sh = ss.getSheetByName(SHEETS.TRANSACTIONS);
-  if (sh) sh.clearContents(); else sh = ss.insertSheet(SHEETS.TRANSACTIONS);
+  if (sh && !isFormatOnly) sh.clearContents(); else if (!sh) sh = ss.insertSheet(SHEETS.TRANSACTIONS);
 
   const headers = ["#", "Date & Time", "Type", "Item Code", "Item Name", "Branch", "Qty", "Stock Before", "Stock After", "Buy Price", "Sell Price", "Profit", "Notes", "Operator", "Source"];
   _applyHeaders(sh, headers);
 
-  for (let r = 2; r <= 3000; r++) {
-    sh.getRange(r, 1).setFormula(`=IF(C${r}="","",ROW()-1)`);
+  if (!isFormatOnly) {
+    const formulas = [];
+    for (let r = 2; r <= 3000; r++) {
+      formulas.push([`=IF(C${r}="","",ROW()-1)`]);
+    }
+    sh.getRange(2, 1, 2999, 1).setFormulas(formulas);
   }
 
   [45, 140, 110, 100, 200, 130, 70, 100, 100, 180, 120, 90].forEach((w, i) => sh.setColumnWidth(1 + i, w));
@@ -1204,9 +1169,14 @@ function _applyHeaders(sh, headers, bgColor) {
 
 function _alternateRows(sh, startRow, endRow, numCols, startCol) {
   startCol = startCol || 1;
+  const numRows = endRow - startRow + 1;
+  if (numRows <= 0) return;
+  const backgrounds = [];
   for (let r = startRow; r <= endRow; r++) {
-    sh.getRange(r, startCol, 1, numCols).setBackground(r % 2 === 0 ? "#F8FAFC" : "#FFFFFF");
+    const rowColor = (r % 2 === 0) ? "#F8FAFC" : "#FFFFFF";
+    backgrounds.push(Array(numCols).fill(rowColor));
   }
+  sh.getRange(startRow, startCol, numRows, numCols).setBackgrounds(backgrounds);
 }
 
 function _dashCard(sh, startRow, col, label, formula) {
@@ -1574,42 +1544,42 @@ function runSmartRepair(mode) {
         }
 
         // Now compare with current inventory stock
+        const newStockValues = [];
+        let hasUpdates = false;
+
         for (let i = 1; i < invData.length; i++) {
           const code = String(invData[i][invCmap.code]).trim();
-          if (!code) continue;
-          stats.itemsAnalyzed++;
+          let currentStock = invCmap.stock !== -1 ? (Number(invData[i][invCmap.stock]) || 0) : 0;
+          let newStock = currentStock;
 
-          const currentStock = invCmap.stock !== -1 ? (Number(invData[i][invCmap.stock]) || 0) : 0;
-          const itemName = invData[i][invCmap.name] || code;
+          if (code) {
+             stats.itemsAnalyzed++;
+             const itemName = invData[i][invCmap.name] || code;
 
-          if (txMap[code]) {
-            const tx = txMap[code];
-            let calculatedStock;
+             if (txMap[code]) {
+               const tx = txMap[code];
+               let calculatedStock;
+               if (!isNaN(tx.firstBefore)) calculatedStock = tx.firstBefore + tx.totalIn - tx.totalOut + tx.totalAdj;
+               else if (!isNaN(tx.latestAfter)) calculatedStock = tx.latestAfter;
 
-            // Method 1: Use firstBefore + transactions
-            if (!isNaN(tx.firstBefore)) {
-              calculatedStock = tx.firstBefore + tx.totalIn - tx.totalOut + tx.totalAdj;
-            }
-            // Method 2: Use latest stockAfter from transactions
-            else if (!isNaN(tx.latestAfter)) {
-              calculatedStock = tx.latestAfter;
-            }
-
-            if (calculatedStock !== undefined && calculatedStock !== currentStock) {
-              log("warn", "  ⚠️ " + itemName + " (" + code + "): Sheet=" + currentStock + " → Calculated=" + calculatedStock);
-              
-              // Update the stock
-              if (invCmap.stock !== -1) {
-                invSh.getRange(i + 1, invCmap.stock + 1).setValue(calculatedStock);
-                stats.stockFixed++;
-                log("ok", "    ✅ Stock corrected to " + calculatedStock);
-              }
-            } else {
-              log("ok", "  ✅ " + itemName + ": Stock=" + currentStock + " (correct, " + tx.count + " transactions)");
-            }
-          } else {
-            log("ok", "  ✅ " + itemName + ": Stock=" + currentStock + " (no transactions)");
+               if (calculatedStock !== undefined && calculatedStock !== currentStock) {
+                 log("warn", "  ⚠️ " + itemName + " (" + code + "): Sheet=" + currentStock + " → Calculated=" + calculatedStock);
+                 newStock = calculatedStock;
+                 stats.stockFixed++;
+                 hasUpdates = true;
+                 log("ok", "    ✅ Stock corrected to " + calculatedStock);
+               } else {
+                 log("ok", "  ✅ " + itemName + ": Stock=" + currentStock + " (correct, " + tx.count + " transactions)");
+               }
+             } else {
+               log("ok", "  ✅ " + itemName + ": Stock=" + currentStock + " (no transactions)");
+             }
           }
+          newStockValues.push([newStock]);
+        }
+
+        if (hasUpdates && invCmap.stock !== -1) {
+          invSh.getRange(2, invCmap.stock + 1, invData.length - 1, 1).setValues(newStockValues);
         }
       }
     }
@@ -1681,20 +1651,6 @@ function _colLetter(idx) {
   return letter;
 }
 
-function _registerTelegramWebhook(token) {
-  try {
-    const props = PropertiesService.getScriptProperties();
-    const secret = props.getProperty("WEBHOOK_SECRET");
-    let webhookUrl = ScriptApp.getService().getUrl();
-    if (webhookUrl.endsWith("/dev")) {
-      webhookUrl = webhookUrl.replace("/dev", "/exec");
-    }
-    webhookUrl += "?token=" + secret;
-    debugLog("Registering Webhook: " + webhookUrl);
-    
-    UrlFetchApp.fetch(`https://api.telegram.org/bot/setWebhook?url=`, { muteHttpExceptions: true });
-  } catch (e) { Logger.log("Webhook registration failed: " + e); debugLog("Webhook Error: " + e); }
-}
 
 function forceSaveSheetId() {
   const id = SpreadsheetApp.getActiveSpreadsheet().getId();

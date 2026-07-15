@@ -1,6 +1,7 @@
 /**
  * Automated Test Suite for AI Smart Inventory
  * Run 'runAllTests' from the Google Apps Script Editor to verify all features.
+ * Triggering clasp push.
  */
 
 function runAllTests() {
