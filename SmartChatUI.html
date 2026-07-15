@@ -208,7 +208,7 @@
       to { opacity: 1; transform: translateY(0); }
     }
     .action-menu.active { display: flex; }
-    
+
     .action-item {
       padding: 10px 16px;
       font-size: 15px;
@@ -282,7 +282,7 @@
 
   <div class="input-area">
     <button class="icon-btn" onclick="toggleMenu()">+</button>
-    
+
     <label class="icon-btn" style="cursor: pointer;">
       📎
       <input type="file" id="fileInput" style="display: none;" accept=".png,.jpg,.jpeg,.pdf,.csv">
@@ -316,9 +316,9 @@
 
     function triggerAction(command) {
       toggleMenu();
-      
+
       const inputEl = document.getElementById('msgInput');
-      
+
       if (command === '/onboarding') {
         appendMessage("Memulai Registrasi Barang Baru. Ketik detail barang (contoh: 10pcs Macbook Pro 2026 harga 25000000) atau lampirkan file (nota/CSV/PDF).", 'ai');
         inputEl.value = "/onboarding ";
@@ -332,7 +332,7 @@
         // Fallback for other commands
         inputEl.value = command + " ";
       }
-      
+
       inputEl.focus();
     }
 
@@ -369,16 +369,16 @@
     function sendMessage() {
       const input = document.getElementById('msgInput');
       const text = input.value.trim();
-      
+
       if (!text && !currentFile) return;
 
       input.value = '';
       document.getElementById('filePreview').style.display = 'none';
-      
+
       let displayMsg = text;
       if (currentFile) displayMsg += ` <i>(File terlampir: ${currentFile.name})</i>`;
       if (!displayMsg) displayMsg = `<i>(Mengirim ${currentFile.name})</i>`;
-      
+
       appendMessage(displayMsg, 'user');
       showTyping();
 

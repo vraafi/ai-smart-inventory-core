@@ -6,7 +6,7 @@
  */
 
 const WhatsAppService = {
-  
+
   getCredentials: function() {
     const props = _getScriptProps();
     return {
@@ -15,7 +15,7 @@ const WhatsAppService = {
       verifyToken: props.getProperty('WA_VERIFY_TOKEN') || ''
     };
   },
-  
+
   saveCredentials: function(accessToken, phoneId, verifyToken) {
     const props = _getScriptProps();
     props.setProperty('WA_ACCESS_TOKEN', accessToken || '');
@@ -30,7 +30,7 @@ const WhatsAppService = {
     }
 
     const url = `https://graph.facebook.com/v20.0/${creds.phoneId}/messages`;
-    
+
     const payload = {
       messaging_product: "whatsapp",
       recipient_type: "individual",
@@ -53,11 +53,11 @@ const WhatsAppService = {
 
     const response = UrlFetchApp.fetch(url, options);
     const json = JSON.parse(response.getContentText());
-    
+
     if (json.error) {
       throw new Error(`WhatsApp API Error: ${json.error.message}`);
     }
-    
+
     return json;
   }
 };

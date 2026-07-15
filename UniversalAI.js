@@ -390,8 +390,8 @@ function _callGeminiProvider(config, prompt, systemPrompt) {
     contentType: "application/json",
     payload: JSON.stringify({
       contents: [{ parts: [{ text: combinedText }] }],
-      generationConfig: { 
-        temperature: 0.1, 
+      generationConfig: {
+        temperature: 0.1,
         maxOutputTokens: 1024,
         responseMimeType: "application/json"
       },
@@ -628,7 +628,7 @@ function showAIProviderSettings() {
 function saveUniversalAISettings(data) {
   const props = PropertiesService.getScriptProperties();
   const bulkProps = {};
-  
+
   bulkProps["AI_PROVIDER"] = data.provider || "auto";
 
   Object.entries(AI_PROVIDERS_CONFIG).forEach(([key, cfg]) => {
@@ -639,7 +639,7 @@ function saveUniversalAISettings(data) {
   });
 
   if (data.customApiKey) bulkProps["AI_CUSTOM_API_KEY"] = data.customApiKey;
-  
+
   props.setProperties(bulkProps);
 }
 
@@ -677,7 +677,7 @@ function testAIConnection(providerName, formData) {
     } else {
       result = _callAIAuto(testPrompt, null);
     }
-    
+
     // Some models return noisy text (e.g. repeating the prompt). Extract the JSON block:
     let cleanJson = result.replace(/```json\n?|\n?```/g, "").trim();
     const match = cleanJson.match(/\{[\s\S]*\}/);
@@ -722,8 +722,8 @@ function _callGemini(prompt, apiKey) {
     contentType: "application/json",
     payload: JSON.stringify({
       contents: [{ parts: [{ text: prompt }] }],
-      generationConfig: { 
-        temperature: 0.1, 
+      generationConfig: {
+        temperature: 0.1,
         maxOutputTokens: 1024,
         responseMimeType: "application/json"
       },

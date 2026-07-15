@@ -1,7 +1,7 @@
 /**
  * TEST DATA GENERATOR - Enterprise Scale
  * Generates realistic product data for stress-testing the AI Inventory System.
- * 
+ *
  * Usage: Open Google Sheets > Menu > 📦 Inventory System > 🧪 Generate Test Data
  */
 
@@ -204,7 +204,7 @@ function generateTestData() {
   // If user wants more than catalog size, generate variants
   const colors = ['Black', 'White', 'Silver', 'Gold', 'Blue', 'Green', 'Red', 'Purple', 'Gray', 'Pink'];
   const regions = ['US', 'EU', 'APAC', 'Global', 'JP', 'KR'];
-  
+
   while (allProducts.length < count) {
     const cat = categories[Math.floor(Math.random() * categories.length)];
     const items = catalog[cat];
@@ -255,7 +255,7 @@ function generateTestData() {
     sheet.autoResizeColumn(col);
   }
 
-  ui.alert('✅ Data Generated!', 
+  ui.alert('✅ Data Generated!',
     `Berhasil membuat ${count} produk enterprise!\n\n` +
     `Kategori: ${categories.length} (${categories.join(', ')})\n\n` +
     `Sekarang coba tes AI dengan mengetik:\n"Terjual 5 unit iPhone 16 Pro Max dan 3 Samsung Galaxy S25 Ultra"`,

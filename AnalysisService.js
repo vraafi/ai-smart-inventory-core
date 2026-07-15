@@ -26,7 +26,7 @@ const AnalysisService = {
     const now = new Date();
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
     const allData = logSheet.getRange(2, 1, lastRow - 1, 7).getValues();
-    
+
     let monthlyData = [];
     let totalIn = 0;
     let totalOut = 0;
@@ -51,7 +51,7 @@ const AnalysisService = {
         if (!branchSummary[branch].items[itemId]) {
           branchSummary[branch].items[itemId] = { in: 0, out: 0 };
         }
-        
+
         if (type === 'IN') {
           branchSummary[branch].in += qty;
           branchSummary[branch].items[itemId].in += qty;
@@ -101,9 +101,6 @@ const AnalysisService = {
 
     // 4. Send to AI for analysis
     const config = AIAgent.getConfig();
-    if (!config.apiKey) {
-      throw new Error("API Key belum dikonfigurasi.");
-    }
 
     const analysisPrompt = `You are a business analyst AI managing a multi-branch inventory system. Analyze the following inventory data and provide:
 1. Top selling items and best performing branches.
@@ -120,7 +117,7 @@ ${dataSummary}`;
     if (config.provider === 'openrouter') {
       aiResponse = this._callAI_OpenRouter(config, analysisPrompt);
     } else {
-      aiResponse = this._callAI_Gemini(config, analysisPrompt);
+      aiResponse = callAI(analysisPrompt, null);
     }
 
     // 5. Send to Telegram
@@ -161,22 +158,4 @@ ${dataSummary}`;
     return json.choices[0].message.content;
   },
 
-  // Helper: Call Gemini Native for analysis
-  _callAI_Gemini: function(config, prompt) {
-    const payload = {
-      contents: [{ parts: [{ text: prompt }] }],
-      generationConfig: { temperature: 0.7 }
-    };
-    const modelName = config.model || "gemini-2.5-flash";
-    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${config.apiKey}`;
-    const options = {
-      method: "post",
-      contentType: "application/json",
-      payload: JSON.stringify(payload),
-      muteHttpExceptions: true
-    };
-    const response = UrlFetchApp.fetch(apiUrl, options);
-    const json = JSON.parse(response.getContentText());
-    return json.candidates[0].content.parts[0].text;
-  }
 };

@@ -7,7 +7,7 @@
     h3 { color: #00d4ff; margin-bottom: 6px; font-size: 15px; }
     p.hint { font-size: 11px; color: #888; margin-bottom: 10px; line-height: 1.4; }
     .section { background: #16213e; border-radius: 10px; padding: 14px; margin-bottom: 14px; border: 1px solid #0f3460; }
-    
+
     label { font-size: 12px; color: #a0a0b0; display: block; margin-bottom: 4px; margin-top: 10px; }
     input[type="text"], select {
       width: 100%; padding: 10px; border: 1px solid #0f3460; border-radius: 8px;
@@ -15,7 +15,7 @@
       outline: none; transition: border-color 0.3s;
     }
     input[type="text"]:focus, select:focus { border-color: #00d4ff; }
-    
+
     .btn-row { display: flex; gap: 8px; margin-top: 12px; }
     button {
       flex: 1; padding: 12px; border: none; border-radius: 8px;
@@ -27,7 +27,7 @@
     .btn-test { background: linear-gradient(135deg, #ff9800, #f57c00); color: #000; }
     .btn-test:hover { transform: translateY(-1px); box-shadow: 0 4px 15px rgba(255,152,0,0.4); }
     .btn-test:disabled, .btn-save:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
-    
+
     #status { margin-top: 10px; padding: 8px; border-radius: 6px; font-size: 12px; display: none; text-align: center; }
     .success { background: #1b5e20; color: #a5d6a7; display: block !important; }
     .error { background: #b71c1c; color: #ffcdd2; display: block !important; }
@@ -42,7 +42,7 @@
   <div class="section">
     <h3>🤖 Konfigurasi Universal AI</h3>
     <p class="hint">Pilih provider AI, masukkan API Key dan nama model. URL endpoint otomatis terisi.</p>
-    
+
     <label>Provider AI</label>
     <select id="aiProvider" onchange="toggleProvider()">
       <option value="nvidia">🟢 NVIDIA (NIM API)</option>
@@ -94,7 +94,7 @@
     google.script.run
       .withSuccessHandler(function(cfg) {
         if (!cfg || !cfg.success) return;
-        
+
         // Determine which provider dropdown to select based on saved endpoint
         var selectedProvider = '';
         if (cfg.provider === 'gemini_native') {
@@ -106,13 +106,13 @@
           document.getElementById('endpointUrl').value = cfg.endpoint;
           document.getElementById('customUrlField').style.display = 'block';
         }
-        
+
         if (selectedProvider) {
           document.getElementById('aiProvider').value = selectedProvider;
           var info = PROVIDER_MAP[selectedProvider];
           if (info) document.getElementById('providerHint').textContent = info.hint;
         }
-        
+
         if (cfg.model) document.getElementById('modelId').value = cfg.model;
         if (cfg.apiKey) document.getElementById('apiKey').value = cfg.apiKey;
       })
@@ -124,7 +124,7 @@
       var info = PROVIDER_MAP[provider];
       var customField = document.getElementById('customUrlField');
       var hintEl = document.getElementById('providerHint');
-      
+
       customField.style.display = (provider === 'custom') ? 'block' : 'none';
       if (info.model) document.getElementById('modelId').value = info.model;
       hintEl.textContent = info.hint;
@@ -133,8 +133,8 @@
     function getEndpointUrl() {
       var provider = document.getElementById('aiProvider').value;
       var info = PROVIDER_MAP[provider];
-      return (provider === 'custom') 
-        ? document.getElementById('endpointUrl').value.trim() 
+      return (provider === 'custom')
+        ? document.getElementById('endpointUrl').value.trim()
         : info.url;
     }
 

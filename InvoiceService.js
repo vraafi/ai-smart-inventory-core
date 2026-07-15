@@ -6,19 +6,19 @@
  */
 
 const InvoiceService = {
-  
+
   /**
    * Generates a PDF invoice and sends it to the customer email.
-   * @param {string} customerEmail 
+   * @param {string} customerEmail
    * @param {object} txData - The transaction data containing itemId, quantity, etc.
    */
   sendInvoice: function(customerEmail, txData) {
     if (!customerEmail || customerEmail === 'null' || customerEmail === '') return;
-    
+
     try {
       const date = new Date().toLocaleDateString();
       const invoiceNumber = "INV-" + new Date().getTime().toString().slice(-6);
-      
+
       const htmlBody = `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eee;">
           <h2 style="color: #333; text-align: center;">INVOICE / RECEIPT</h2>
@@ -47,12 +47,12 @@ const InvoiceService = {
           <p style="text-align: center; color: #777; font-size: 12px;">Thank you for your business!</p>
         </div>
       `;
-      
+
       // Create PDF blob
       const blob = Utilities.newBlob(htmlBody, MimeType.HTML)
           .setName("Invoice_" + invoiceNumber + ".pdf")
           .getAs(MimeType.PDF);
-          
+
       // Send Email
       MailApp.sendEmail({
         to: customerEmail,
@@ -60,7 +60,7 @@ const InvoiceService = {
         htmlBody: "Please find your invoice attached.",
         attachments: [blob]
       });
-      
+
     } catch(e) {
       console.error("Failed to send invoice: " + e.message);
     }

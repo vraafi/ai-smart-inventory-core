@@ -145,13 +145,13 @@
 
 ## Aturan Lokalisasi Bahasa (SaaS Multilingual)
 - **Konteks:** Saat merancang *prompt* sistem untuk Groq/Gemini, atau saat membalas pesan pengguna.
-- **Tindakan Wajib:** Sistem **WAJIB** merespons dan menghasilkan teks antarmuka (termasuk menu opsi, *warning*, atau notifikasi) dalam bahasa yang SAMA persis dengan bahasa input pengguna. 
+- **Tindakan Wajib:** Sistem **WAJIB** merespons dan menghasilkan teks antarmuka (termasuk menu opsi, *warning*, atau notifikasi) dalam bahasa yang SAMA persis dengan bahasa input pengguna.
 - **Solusi:** Di dalam sistem *prompt* internal, jangan melakukan *hardcode* teks ke bahasa Inggris jika itu akan dibaca oleh pengguna akhir. Tambahkan instruksi eksplisit ke dalam prompt seperti: *"Respond ONLY in the same language the user used."*
 
 ## Aturan Arsitektur Google Apps Script Library (Stub.gs)
 - **Konteks:** Menambah fungsi UI atau fungsi pemicu (menu) baru ke dalam sistem AI Smart Inventory yang berjalan sebagai Library Google Apps Script (`SmartInventoryCore`).
 - **Akar Masalah (Kenapa tidak ditaruh di Library saja?):** Secara arsitektur, Google Sheets **hanya** bisa mengeksekusi fungsi yang berada di dalam *Bound Script* miliknya sendiri (`Stub.gs`). Fungsi yang berada murni di dalam *Library* eksternal tidak akan dikenali oleh antarmuka (UI) Google Sheets. Oleh karena itu, kita membuat kode utama di Library (`SmartInventoryCore.createSecurityAuditTab()`), tetapi kita **tetap membutuhkan** fungsi perantara (*wrapper*) di `Stub.gs` agar UI bisa memanggilnya.
-- **Aturan Wajib:** Setiap penambahan fungsi menu baru di kode sumber (Library), Anda WAJIB membuatkan fungsi *wrapper/stub* di sisi klien. 
+- **Aturan Wajib:** Setiap penambahan fungsi menu baru di kode sumber (Library), Anda WAJIB membuatkan fungsi *wrapper/stub* di sisi klien.
 - **Tindakan Otomatisasi (Full Automation):** JANGAN meminta pengguna untuk *copy-paste* kode secara manual. Mengingat Anda memiliki akses ke seluruh *workspace*, Anda WAJIB menggunakan perintah terminal (seperti PowerShell atau `multi_replace_file_content`) untuk mencari folder *client script* (misalnya `AI_Smart_Inventory_System`), mengedit file `Stub.js` secara langsung, dan mengeksekusi `clasp push`!
 
 ## Aturan Google Apps Script: Simple Triggers UI
@@ -180,13 +180,13 @@
 ## Aturan Ekstraksi JSON (Anti-Halusinasi Chatty Models)
 - **Konteks:** Mengurai (parsing) JSON dari model AI yang cenderung memberikan teks penjelasan panjang atau *Chain of Thought* (seperti Gemma atau Llama), terutama di dalam lingkungan Google Apps Script (`AIAgent.js`).
 - **Akar Masalah:** Model sering menyertakan tanda kurung siku/kurawal palsu (`[` atau `{`) di dalam teks penjelasannya. Fungsi ekstraktor yang hanya mencari index `[` pertama dan `]` terakhir akan mengambil *string* cacat dan menyebabkan error "Gagal memproses output AI menjadi JSON".
-- **Aturan Wajib:** 
+- **Aturan Wajib:**
   1. *System Prompt* WAJIB secara eksplisit melarang penalaran: "DILARANG KERAS memberikan penjelasan, langkah berpikir, atau teks pengantar apapun. Output HARUS langsung berupa JSON array/object."
   2. DILARANG menggunakan metode `indexOf` ke `lastIndexOf` tunggal untuk mengambil JSON. Fungsi ekstraktor (`_extractJson`) WAJIB menggunakan algoritma perulangan (`while`) yang memindai dan menyusutkan batas (mencoba semua kombinasi kurung) dipadukan dengan `try...catch(JSON.parse)` hingga menemukan blok yang valid, untuk menjamin kekebalan terhadap teks acak.
 
 ## Aturan Sinkronisasi AI Prompt & Execution Engine (Formatting Bug Fix)
 - **Konteks:** Mengembangkan fitur UI berbasis AI (seperti perintah `/format` atau sejenisnya) di mana *System Prompt* menjabarkan parameter dan perintah (cmd) yang bisa dieksekusi.
 - **Akar Masalah:** Divergensi (*mismatch*) antara string perintah yang diajarkan ke LLM (misal: `SET_BACKGROUND`) dengan string yang diharapkan oleh mesin *backend* Google Apps Script (misal: `SET_BACKGROUND_COLOR`). Ini menyebabkan perintah gagal diam-diam.
-- **Aturan Wajib:** 
+- **Aturan Wajib:**
   1. Setiap kali menambah atau memodifikasi fungsionalitas di sistem pengeksekusi (*Execution Engine*, seperti `Agent.js`), agen WAJIB memastikan bahwa *System Prompt* di `AIAgent.js` (atau antarmuka AI terkait) diperbarui secara akurat untuk mencerminkan parameter terbaru.
   2. JANGAN PERNAH berasumsi bahwa format yang dihasilkan AI bisa dieksekusi tanpa memeriksa blok `if...else` / `switch` pada fungsi eksekusi aslinya. Pastikan nama *keys* (`cmd`, `range`, `color`) dan fungsinya sinkron 100%.

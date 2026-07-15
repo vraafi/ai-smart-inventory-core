@@ -86,19 +86,19 @@ function doPost(e) {
 function _checkAccess(idStr, text, platform) {
   const props = _getScriptProps();
   const adminId = props.getProperty("ADMIN_CHAT_ID");
-  
+
   if (!adminId) {
     props.setProperty("ADMIN_CHAT_ID", idStr);
     props.setProperty("WHITELIST_IDS", idStr);
     debugLog("Saved new ADMIN_CHAT_ID: " + idStr);
     return true;
   }
-  
+
   const isPublic = props.getProperty("PUBLIC_MODE") === "ON";
   const whitelistStr = props.getProperty("WHITELIST_IDS") || adminId;
   const whitelist = whitelistStr.split(",").map(s => s.trim());
   const isAllowed = isPublic || whitelist.includes(idStr);
-  
+
   if (idStr === adminId) {
     if (text.startsWith("/allow ")) {
       const newId = text.replace("/allow ", "").trim();
@@ -137,7 +137,7 @@ function _checkAccess(idStr, text, platform) {
       return "ADMIN_CMD";
     }
   }
-  
+
   if (!isAllowed) {
     _sendAgentMsg(platform, idStr, `⛔ *Akses Ditolak*\nAnda tidak terdaftar di sistem ini.\nID Anda: \`${idStr}\`\n\nBerikan ID ini kepada Admin untuk didaftarkan.`);
     return false;
@@ -149,7 +149,7 @@ function _checkAccess(idStr, text, platform) {
 function _processWhatsAppMessage(phone, text, senderName) {
   const access = _checkAccess(phone.toString(), text || "", "whatsapp");
   if (access === "ADMIN_CMD" || access === false) return;
-  
+
   if (text === "/start" || text === "/help") {
     _sendWhatsApp(phone, _buildWelcomeMessage(senderName));
     return;
@@ -192,7 +192,7 @@ function _processTelegramMessage(chatId, text, senderName, document) {
         
         const mime = blob.getContentType();
         const name = blob.getName().toLowerCase();
-        
+
         if (name.endsWith(".csv") || name.endsWith(".xlsx") || mime.includes("csv") || mime.includes("spreadsheetml") || mime.includes("excel")) {
             bulkDataArray = _getRawDataArrayFromBlob(blob);
             if (bulkDataArray && bulkDataArray.length > 1) {
@@ -226,7 +226,7 @@ function _processTelegramMessage(chatId, text, senderName, document) {
     _sendAgentMsg("telegram", chatId, _buildStockCheckResult(q));
     return;
   }
-  
+
   if (!bulkDataArray && !finalContext.match(/https:\/\/docs\.google\.com\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/)) {
      _sendTelegram(chatId, "⏳ AI is processing your report...");
   }
@@ -294,7 +294,7 @@ function pollEmails() {
         
         // Skip if already processed in this property string
         if (processed.includes(msgId)) continue;
-        
+
         if (threadProcessedCount >= 1) {
            // We only process the 1 newest unread message per thread to prevent infinite reply loops.
            // Mark older unread messages in the same thread as read so they don't clog future polls.
@@ -305,16 +305,16 @@ function pollEmails() {
         debugLog(`Processing NEW UNREAD message: ${msgId}`);
         
         const subject   = msg.getSubject();
-        
+
         // Anti Infinite-Loop: Skip emails sent by the AI itself, but allow user replies (which start with Re: or Fwd:)
         const lowerSubject = subject.toLowerCase();
-        if ((subject.includes("AI Inventory Notification") || subject.includes("Nexus AI Report")) 
-            && !lowerSubject.startsWith("re:") 
+        if ((subject.includes("AI Inventory Notification") || subject.includes("Nexus AI Report"))
+            && !lowerSubject.startsWith("re:")
             && !lowerSubject.startsWith("fwd:")) {
            msg.markRead();
            continue;
         }
-        
+
         const rawBody   = msg.getPlainBody().substring(0, 1500);
         const from      = msg.getFrom();
         const senderName = from.replace(/<.*>/g, "").trim() || from;
@@ -363,7 +363,7 @@ function pollEmails() {
         processed += "," + msgId;
         props.setProperty("PROCESSED_EMAILS", processed.slice(-8000));
         msg.markRead();
-        
+
         threadProcessedCount++;
         globalProcessedCount++;
       }
@@ -389,7 +389,7 @@ function _logSecurityAudit(source, senderName, senderId, messageText) {
 function _processWithAI(chatId, rawText, senderName, source, bulkDataArray = null) {
   _logSecurityAudit(source, senderName, chatId, rawText);
   const lowerText = rawText.toLowerCase();
-  
+
   if (lowerText.includes("/wipe") || lowerText.includes("/format") || lowerText.includes("/onboarding")) {
     _sendAgentMsg(source, chatId, "❌ FITUR DIBATASI (RESTRICTED FEATURE)\\n\\nFitur registrasi barang baru, hapus data, dan format tabel telah dipindahkan secara fisik ke UI Google Sheets demi keamanan Enterprise.\\n\\nSilakan minta Admin/Bos untuk membuka Google Sheets dan menggunakan menu '📦 Smart Inventory'.");
     return;
@@ -403,7 +403,7 @@ function _processWithAI(chatId, rawText, senderName, source, bulkDataArray = nul
       const rawData = bulkDataArray || _getRawDataArrayFromUrl(urlMatch[0]);
       if (rawData && rawData.length > 1) {
          const previewData = rawData.slice(0, 10);
-         
+
          const mappingPrompt = `You are an expert data mapper. Analyze the following first 10 rows of a Google Sheet and determine the sheet type (INVENTORY, TRANSACTION, or UNSTRUCTURED).
 Source Data Preview: ${JSON.stringify(previewData)}
 
@@ -434,11 +434,11 @@ Example output for UNSTRUCTURED:
          const aiRaw = callAI(mappingPrompt, "You are a JSON generator.");
          const jsonMatch = aiRaw.match(/\{[\s\S]*\}/);
          if (!jsonMatch) throw new Error("AI gagal memetakan kolom.");
-         
+
          const parsed = JSON.parse(jsonMatch[0]);
          const sheetType = parsed.sheet_type || "INVENTORY";
          const mapping = parsed.mapping || {};
-         
+
          if (sheetType === "UNSTRUCTURED") {
              _sendAgentMsg(source, chatId, "🧩 Tabel terdeteksi sebagai Laporan/Matriks kompleks. Memulai Mode Pemahaman Mendalam AI...");
              if (!bulkDataArray && urlMatch) {
@@ -450,7 +450,7 @@ Example output for UNSTRUCTURED:
              if (sheetType === "INVENTORY" && !mapping.item_name) {
                  throw new Error("AI mengklasifikasi ini sebagai Inventory, tapi tidak bisa menemukan kolom Nama Barang.");
              }
-             
+
              const sourceHeaders = rawData[0]; // Assume first row is header for tabular data
              // Process mapping indices
              const headerIndices = {};
@@ -458,25 +458,25 @@ Example output for UNSTRUCTURED:
                  const sourceField = mapping[targetField];
                  headerIndices[targetField] = sourceField ? sourceHeaders.indexOf(sourceField) : -1;
              }
-             
+
              const numRowsToCopy = rawData.length - 1;
              _sendAgentMsg(source, chatId, `⚡ Mengimpor ${numRowsToCopy} baris data ke tab ${sheetType === "INVENTORY" ? "Inventory" : "Transaction"} secara instan...`);
-             
+
              const ss = _getSpreadsheet();
              let targetSheetName = sheetType === "INVENTORY" ? "Inventory" : "Transaction";
              let targetSheet = ss.getSheetByName(targetSheetName);
              if (!targetSheet) throw new Error(`Tab ${targetSheetName} tidak ditemukan.`);
-             
+
              const newRows = [];
              for (let r = 1; r < rawData.length; r++) {
                  const row = rawData[r];
                  if (row.join("").trim() === "") continue; // Skip empty rows
-                 
+
                  if (sheetType === "INVENTORY") {
                      const itemCode = headerIndices.item_code > -1 ? row[headerIndices.item_code] : `MIG-${Date.now()}-${r}`;
                      const itemName = headerIndices.item_name > -1 ? row[headerIndices.item_name] : `Item ${r}`;
                      if (!itemName || itemName.trim() === "") continue;
-                     
+
                      const category = headerIndices.category > -1 ? row[headerIndices.category] : "Migrated";
                      const branch = headerIndices.branch > -1 ? row[headerIndices.branch] : "";
                      const initialStock = headerIndices.initial_stock > -1 ? parseFloat(row[headerIndices.initial_stock] || 0) : 0;
@@ -484,9 +484,9 @@ Example output for UNSTRUCTURED:
                      const buyPrice = headerIndices.buy_price > -1 && row[headerIndices.buy_price] ? parseFloat(String(row[headerIndices.buy_price]).replace(/[^0-9.-]+/g,"") || 0) : 0;
                      const sellPrice = headerIndices.sell_price > -1 && row[headerIndices.sell_price] ? parseFloat(String(row[headerIndices.sell_price]).replace(/[^0-9.-]+/g,"") || 0) : 0;
                      const status = headerIndices.status > -1 ? row[headerIndices.status] : "Active";
-                     
+
                      const uniqueId = Utilities.getUuid ? Utilities.getUuid().substring(0,8).toUpperCase() : `ID-${Date.now()}-${r}`;
-                     
+
                      newRows.push([
                          uniqueId, itemCode, itemName, category, branch, initialStock, 0, 0, "", 0, unit, buyPrice, sellPrice, status, "", new Date()
                      ]);
@@ -503,17 +503,17 @@ Example output for UNSTRUCTURED:
                      const profit = sellPrice - buyPrice;
                      const notes = headerIndices.notes > -1 ? row[headerIndices.notes] : "";
                      const operator = headerIndices.operator > -1 ? row[headerIndices.operator] : "Auto-Import";
-                     
+
                      newRows.push([
                          "", date, type, itemCode, itemName, branch, qty, 0, 0, buyPrice, sellPrice, profit, notes, operator, "System"
                      ]);
                  }
              }
-             
+
              if (newRows.length > 0) {
                 const lastRow = Math.max(targetSheet.getLastRow(), 1);
                 targetSheet.getRange(lastRow + 1, 1, newRows.length, newRows[0].length).setValues(newRows);
-                
+
                 if (sheetType === "INVENTORY") {
                     const formulas = [];
                     for(let nr = lastRow + 1; nr <= lastRow + newRows.length; nr++) {
@@ -527,12 +527,12 @@ Example output for UNSTRUCTURED:
                     }
                     targetSheet.getRange(lastRow + 1, 1, newRows.length, 1).setFormulas(formulas);
                 }
-                
+
                 _sendAgentMsg(source, chatId, `✅ Sukses! ${newRows.length} baris berhasil dimigrasikan ke tab ${targetSheetName}.`);
              } else {
                 _sendAgentMsg(source, chatId, "⚠️ Tidak ada baris data yang valid untuk diimpor.");
              }
-             
+
              return; // Stop further parsing so it doesn't try to parse transactions as chat
          }
 
@@ -606,13 +606,13 @@ CRITICAL LOCALIZATION RULE: Detect the language of the user's input. You MUST pr
   let attempt = 1;
   let currentPrompt = prompt;
   let success = false;
-  
+
   while (attempt <= maxAttempts && !success) {
     try {
       debugLog("Sending to AI (Attempt " + attempt + ")...");
       aiRaw = callAI(currentPrompt, null);
       debugLog("[ROUTING] AI Raw Output (Attempt " + attempt + "): " + aiRaw);
-      
+
       let parsed = AIAgent._extractJson(aiRaw);
       if (parsed) {
         rootParsed = parsed || {};
@@ -626,12 +626,12 @@ CRITICAL LOCALIZATION RULE: Detect the language of the user's input. You MUST pr
           }
         }
         parsedList = Array.isArray(parsed) ? parsed : [parsed];
-        
+
         // SELF VERIFICATION
         let verifySys = "Anda adalah auditor QA internal. Verifikasi apakah JSON ini sudah memenuhi instruksi pengguna dengan tepat. Jawab HANYA dengan kata 'SUDAH' jika benar. Jika ada kesalahan logika, salah qty, salah nama barang, atau salah klasifikasi IN/OUT, sebutkan detail kesalahannya agar AI utama bisa memperbaiki.";
         let verifyPrompt = "\nInstruksi Pengguna: \"" + rawText + "\"\n\nJSON yang dihasilkan:\n" + JSON.stringify(parsedList) + "\n\nApakah JSON ini sudah tepat sasaran?";
         let verifyResult = callAI(verifyPrompt, verifySys);
-        
+
         if (verifyResult.trim().toUpperCase().startsWith("SUDAH") || attempt === maxAttempts) {
            if (attempt === maxAttempts && !verifyResult.trim().toUpperCase().startsWith("SUDAH")) {
                debugLog("⚠️ Max attempts reached, forcing execution. Last feedback: " + verifyResult);
@@ -658,7 +658,7 @@ CRITICAL LOCALIZATION RULE: Detect the language of the user's input. You MUST pr
        attempt++;
     }
   }
-  
+
   try {
      if (!success && !parsedList) {
          throw new Error("Gagal setelah " + maxAttempts + " percobaan.");
@@ -678,7 +678,7 @@ CRITICAL LOCALIZATION RULE: Detect the language of the user's input. You MUST pr
   }
 
   debugLog("Parsed " + parsedList.length + " transactions from AI");
-  
+
   if (parsedList.length === 0) {
     const errMsg = rootParsed.sys_err_intent || "🤔 I couldn't determine the intent of this part of your report.\n\nPlease clarify: is this a Stock IN, Stock OUT, or Stock Adjustment?";
     if (chatId) _sendAgentMsg(source, chatId, errMsg);
@@ -690,14 +690,14 @@ CRITICAL LOCALIZATION RULE: Detect the language of the user's input. You MUST pr
     debugLog("Processing tx #" + (idx+1) + ": type=" + parsed.type + " code=" + parsed.item_code + " name=" + parsed.item_name + " qty=" + parsed.quantity + " conf=" + parsed.confidence);
     if (parsed.type === "UNKNOWN") {
       const errMsg = rootParsed.sys_err_intent || "🤔 I couldn't determine the intent of this part of your report.\n\nPlease clarify: is this a Stock IN, Stock OUT, or Stock Adjustment?";
-      
+
       // Fraud Detection Hook
       if (parsed.notes && parsed.notes.toUpperCase().includes("FRAUD WARNING")) {
           _logSecurityThreat(senderName, "Price Manipulation", rawText, parsed.notes);
           if (chatId) _sendAgentMsg(source, chatId, `🚨 ${parsed.notes}`);
           continue;
       }
-      
+
       if (chatId) _sendAgentMsg(source, chatId,
         `${errMsg}\n\nAI Note: ${parsed.ai_reasoning || "Not specified"}`
       );
@@ -723,7 +723,7 @@ CRITICAL LOCALIZATION RULE: Detect the language of the user's input. You MUST pr
           .replace("{name}", parsed.item_name || parsed.new_item_name)
           .replace("{type}", parsed.type)
           .replace("{qty}", parsed.quantity);
-          
+
         CacheService.getUserCache().put("pending_" + chatId, JSON.stringify({ parsed, rawText, senderName, source }), 300);
         _sendAgentMsg(source, chatId, msg);
       }
@@ -1291,7 +1291,7 @@ function _executeFormatAction(actionArr, source, chatId) {
   try {
     const ss = _getSpreadsheet();
     let executedCount = 0;
-    
+
     let actionsToRun = [];
     for (let act of actionArr) {
       let sheetName = String(act.sheet).toUpperCase();
@@ -1304,23 +1304,23 @@ function _executeFormatAction(actionArr, source, chatId) {
         actionsToRun.push(act);
       }
     }
-    
+
     for (let act of actionsToRun) {
       const sh = ss.getSheetByName(act.sheet);
       if (!sh) continue;
-      
+
       try {
         if (act.cmd === "RESET_FORMAT") {
           let fullRange = sh.getRange(1, 1, sh.getMaxRows(), sh.getMaxColumns());
-          
+
           // Fase 1: Format Visual pada SELURUH sheet
           fullRange.breakApart();
-          fullRange.clearFormat(); 
+          fullRange.clearFormat();
           fullRange.clearDataValidations();
           fullRange.setBackground(null);
           fullRange.setFontColor("#000000");
           sh.clearConditionalFormatRules();
-          
+
           let bandings = sh.getBandings();
           for (let i = 0; i < bandings.length; i++) {
             bandings[i].remove();
@@ -1332,7 +1332,7 @@ function _executeFormatAction(actionArr, source, chatId) {
           if (dataRange) {
             let displayValues = dataRange.getDisplayValues();
             let errorCells = [];
-            
+
             let getColLetter = (c) => {
                let temp, letter = '';
                while (c > 0) {
@@ -1350,7 +1350,7 @@ function _executeFormatAction(actionArr, source, chatId) {
                 }
               }
             }
-            
+
             if (errorCells.length > 0) {
               const chunkSize = 400;
               for (let i = 0; i < errorCells.length; i += chunkSize) {
@@ -1360,7 +1360,7 @@ function _executeFormatAction(actionArr, source, chatId) {
           }
           let maxCols = sh.getMaxColumns();
           if (maxCols > 0) sh.setColumnWidths(1, maxCols, 100);
-          
+
           let maxRows = sh.getMaxRows();
           if (maxRows > 0) sh.setRowHeights(1, maxRows, 21);
           executedCount++;
@@ -1375,7 +1375,7 @@ function _executeFormatAction(actionArr, source, chatId) {
              let colStatus = headers.findIndex(h => String(h).toLowerCase() === "status") + 1;
              let colQR = headers.findIndex(h => String(h).toLowerCase().includes("qr")) + 1;
              let colUpdate = headers.findIndex(h => String(h).toLowerCase().includes("update")) + 1;
-             
+
              let colInit = headers.findIndex(h => String(h).toLowerCase().includes("initial")) + 1 || 6;
              let colIn = headers.findIndex(h => String(h).toLowerCase().includes("in")) + 1 || 7;
              let colOut = headers.findIndex(h => String(h).toLowerCase().includes("out")) + 1 || 8;
@@ -1397,7 +1397,7 @@ function _executeFormatAction(actionArr, source, chatId) {
              let minL = colMinStock > 0 ? getColLetter(colMinStock) : "J";
 
              let numRows = maxRows - 1;
-             
+
              let currentStockFormulas = [];
              let statusFormulas = [];
              let qrFormulas = [];
@@ -1409,7 +1409,7 @@ function _executeFormatAction(actionArr, source, chatId) {
                 if (colQR > 0) qrFormulas.push([`=IF(B${r}="","",IMAGE("https://quickchart.io/qr?text=" & B${r} & "&size=100", 4, 100, 100))`]);
                 if (colUpdate > 0) updateFormulas.push([`=IF(B${r}="","",TEXT(NOW(),"dd/MM/yyyy HH:mm"))`]);
              }
-             
+
              // Batch update formulas (konsep yang diambil dari REST API v4 batchUpdate tapi native GAS)
              if (colCurrentStock > 0) sh.getRange(2, colCurrentStock, numRows, 1).setFormulas(currentStockFormulas);
              if (colStatus > 0) sh.getRange(2, colStatus, numRows, 1).setFormulas(statusFormulas);
@@ -1486,7 +1486,7 @@ function _executeFormatAction(actionArr, source, chatId) {
         // Skip invalid formats silently
       }
     }
-    
+
     let result = { success: false, message: "", count: executedCount };
     if (executedCount > 0) {
       result.success = true;

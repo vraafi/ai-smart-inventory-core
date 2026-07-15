@@ -2,7 +2,7 @@
  * ULTRA-PREMIUM AI AGENT (Universal API Edition)
  * =======================================================
  * File: AIAgent.js
- * 
+ *
  * Supports:
  * - Gemini Native (Google AI Studio)
  * - Universal APIs (OpenRouter, Groq, OpenAI)
@@ -31,11 +31,11 @@ const AIAgent = {
     const lastRow = sheet.getLastRow();
     const headerRow = InventoryCore.findHeaderRow(sheet);
     const startRow = headerRow + 1;
-    
+
     if (lastRow < startRow) return "[]";
-    
+
     const dataRange = sheet.getRange(startRow, 1, lastRow - startRow + 1, 3).getValues();
-    
+
     // RAG Lite: Extract meaningful keywords (>2 chars) from user's message
     const rawLower = rawText ? String(rawText).toLowerCase() : "";
     const words = rawLower.match(/[a-z0-9]+/g) || [];
@@ -47,7 +47,7 @@ const AIAgent = {
         const branch = String(row[0]);
         const id = String(row[1]);
         const name = String(row[2]);
-        
+
         if (!rawText || searchTerms.length === 0) {
           // Fallback if no text: load max 150 items to ensure safety
           if (items.length < 150) items.push({ branch, id, name });
@@ -56,20 +56,20 @@ const AIAgent = {
 
         const searchable = (branch + " " + id + " " + name).toLowerCase();
         let match = false;
-        
+
         for (let w of searchTerms) {
           if (searchable.includes(w)) {
             match = true;
             break;
           }
         }
-        
+
         if (match) {
           items.push({ branch, id, name });
         }
       }
     });
-    
+
     // Return max 150 matched items to prevent Context Window overflow
     return JSON.stringify(items.slice(0, 150));
   },
@@ -113,24 +113,24 @@ ${inventoryContext}
    */
   parseTransaction: function(rawText) {
     const systemPrompt = this._buildSystemPrompt(rawText);
-    
+
     // --- METODE BERFIKIR 2X (SMART LOOP QA) ---
     let maxAttempts = 3;
     let attempt = 1;
     let currentPrompt = rawText;
     let finalParsed = null;
     let success = false;
-    
+
     while (attempt <= maxAttempts && !success) {
       const aiOutput = callAI(currentPrompt, systemPrompt);
       let parsed = this._extractJson(aiOutput);
-      
+
       if (parsed) {
          // SELF VERIFICATION
          let verifySys = "Anda adalah auditor QA internal. Verifikasi apakah JSON ini sudah memenuhi instruksi pengguna dengan tepat. Jawab HANYA dengan kata 'SUDAH' jika benar. Jika ada kesalahan logika, salah qty, salah nama barang, atau klasifikasi IN/OUT yang salah, sebutkan detail kesalahannya agar AI utama bisa memperbaiki.";
          let verifyPrompt = "\nInstruksi Pengguna: \"" + rawText + "\"\n\nJSON yang dihasilkan:\n" + JSON.stringify(parsed) + "\n\nApakah JSON ini sudah tepat sasaran?";
          let verifyResult = callAI(verifyPrompt, verifySys);
-         
+
          if (verifyResult.trim().toUpperCase().startsWith("SUDAH") || attempt === maxAttempts) {
              finalParsed = parsed;
              success = true;

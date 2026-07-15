@@ -69,7 +69,7 @@ function _readExcelViaDrive(blob) {
 function _getRawDataArrayFromBlob(blob) {
   const mime = blob.getContentType();
   const name = blob.getName().toLowerCase();
-  
+
   if (name.endsWith(".csv") || name.endsWith(".cvs") || mime.includes("csv") || mime === "text/comma-separated-values") {
     try {
       return Utilities.parseCsv(blob.getDataAsString());
@@ -103,7 +103,7 @@ function _getRawDataArrayFromUrl(url) {
     const match = url.match(/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
     if (!match) return [];
     const sheetId = match[1];
-    
+
     // Attempt to open. Will fail if private/no permission
     const ss = SpreadsheetApp.openById(sheetId);
     const sheet = ss.getSheets()[0]; // Just read the first sheet for bulk import
@@ -122,11 +122,11 @@ function _extractTextFromUrl(url) {
     const match = url.match(/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
     if (!match) return "";
     const sheetId = match[1];
-    
+
     // Attempt to open. Will fail if private/no permission
     const ss = SpreadsheetApp.openById(sheetId);
     const sheets = ss.getSheets();
-    
+
     let text = "";
     // Read up to first 3 sheets to prevent massive payload timeouts
     for (let i = 0; i < Math.min(sheets.length, 3); i++) {
@@ -170,12 +170,12 @@ function _convert2DArrayToText(data) {
 function _readImageOrPdfViaDriveOcr(blob) {
   let mime = blob.getContentType() || "";
   const name = (blob.getName() || "").toLowerCase();
-  
+
   if (mime === "" || mime === "application/octet-stream") {
       if (name.endsWith(".pdf")) mime = "application/pdf";
       else if (name.endsWith(".png")) mime = "image/png";
       else if (name.endsWith(".jpg") || name.endsWith(".jpeg")) mime = "image/jpeg";
-      
+
       blob.setContentType(mime); // Force the blob to have the correct source mime type
   }
 
@@ -183,10 +183,10 @@ function _readImageOrPdfViaDriveOcr(blob) {
     title: "TEMP_OCR_PARSE_" + Date.now(),
     mimeType: mime // Use the source mime type. Drive will convert it to Docs because of {ocr: true}
   };
-  
+
   // Insert the file into Drive with OCR enabled
   const file = Drive.Files.insert(resource, blob, { ocr: true });
-  
+
   let text = "";
   try {
     const doc = DocumentApp.openById(file.id);
@@ -200,7 +200,7 @@ function _readImageOrPdfViaDriveOcr(blob) {
       Drive.Files.trash(file.id);
     } catch(e) {}
   }
-  
+
   // Limit output if it's too massive
   if (text.length > 8000) {
     text = text.substring(0, 8000) + "\n...[TRUNCATED DUE TO SIZE]";

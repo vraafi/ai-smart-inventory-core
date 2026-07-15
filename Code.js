@@ -110,7 +110,7 @@ function recalculateStock() {
 function checkLowStockAlerts() {
   const ui = SpreadsheetApp.getUi();
   const lowItems = InventoryCore.getLowStockItems();
-  
+
   if (lowItems.length > 0) {
     let msg = 'The following items are low on stock:\n\n';
     lowItems.forEach(item => {
@@ -128,7 +128,7 @@ function debugInventory() {
   try {
     const sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
     const lastRow = sheet.getLastRow();
-    
+
     // Test Header
     const searchRange = sheet.getRange(1, 1, 10, 2).getValues();
     let foundHeader = -1;
@@ -140,13 +140,13 @@ function debugInventory() {
 
     const headerRow = InventoryCore.findHeaderRow(sheet);
     const startRow = headerRow + 1;
-    
+
     let msg = `Last Row: ${lastRow}\nMy HeaderRow: ${headerRow} (New test found: ${foundHeader} val: '${headerStr}')\nStart Row: ${startRow}\n\n`;
-    
+
     if (lastRow >= 2) {
       const dataRange = sheet.getRange(2, 1, lastRow - 1, 8).getValues();
       msg += `Scanning Rows 2 to ${lastRow}:\n`;
-      
+
       dataRange.forEach((row, idx) => {
         const actualRow = idx + 2;
         const id = String(row[0]);
@@ -161,7 +161,7 @@ function debugInventory() {
     } else {
       msg += "No data rows found.";
     }
-    
+
     ui.alert('Debug Info V2', msg, ui.ButtonSet.OK);
   } catch(e) {
     ui.alert('Debug Error', e.message, ui.ButtonSet.OK);
@@ -182,10 +182,10 @@ function processTransaction(data) {
     const userEmail = Session.getActiveUser().getEmail() || "Unknown User";
     const branch = data.branch || 'Pusat';
     InventoryCore.logAndProcessTransaction(branch, data.itemId, data.type, data.quantity, data.notes, userEmail);
-    
+
     // Check stock and send telegram if needed
     checkAndSendTelegramSilent();
-    
+
     return { success: true };
   } catch (e) {
     return { success: false, message: e.message };
@@ -252,17 +252,17 @@ function processAutonomousInput(rawText) {
   try {
     LicenseClient.require();
     const parsedData = AIAgent.parseTransaction(rawText);
-    
+
     // Clarification fallback
     if (parsedData && !Array.isArray(parsedData) && parsedData.cmd === "ASK_USER") {
        return { success: false, isQuestion: true, message: parsedData.question };
     }
-    
+
     const userEmail = Session.getActiveUser().getEmail() || "AI Autonomous Agent";
-    
+
     // Handle both single object and array of transactions
     const transactions = Array.isArray(parsedData) ? parsedData : [parsedData];
-    
+
     // 1. Process all transactions and build report
     let reportMsg = `🤖 <b>Laporan AI (Groq/Gemini)</b>\n`;
     reportMsg += `Memproses ${transactions.length} transaksi:\n\n`;
@@ -273,17 +273,17 @@ function processAutonomousInput(rawText) {
         const branch = tx.branch || 'Pusat';
         InventoryCore.logAndProcessTransaction(
           branch,
-          tx.itemId, 
-          tx.type, 
-          tx.quantity, 
-          tx.notes, 
+          tx.itemId,
+          tx.type,
+          tx.quantity,
+          tx.notes,
           userEmail
         );
         successCount++;
         let icon = tx.type === 'IN' ? '🟢' : '🔴';
         reportMsg += `${index + 1}. [${branch}] ${icon} <b>${tx.type}</b>: ${tx.quantity} unit [<code>${tx.itemId}</code>]\n`;
         reportMsg += `   <i>Catatan: ${tx.notes}</i>\n`;
-        
+
         // PREMIUM FEATURE: Auto-Invoicing
         if (tx.type === 'OUT' && tx.customerEmail) {
           InvoiceService.sendInvoice(tx.customerEmail, tx);
@@ -294,20 +294,20 @@ function processAutonomousInput(rawText) {
         reportMsg += `   <i>Alasan: ${err.message}</i>\n`;
       }
     });
-    
+
     reportMsg += `\n<i>Diproses otomatis oleh sistem (${successCount}/${transactions.length} berhasil).</i>`;
-    
-    
-    
+
+
+
     try {
       TelegramService.sendMessage(reportMsg);
     } catch(err) {
       console.error("Gagal mengirim laporan Telegram: " + err.message);
     }
-    
+
     // 3. Check low stock alerts
     checkAndSendTelegramSilent();
-    
+
     return { success: true, parsed: parsedData, count: transactions.length };
   } catch (e) {
     return { success: false, message: e.message };
@@ -318,21 +318,21 @@ function processAutonomousInput(rawText) {
 function sendLowStockToTelegram() {
   const ui = SpreadsheetApp.getUi();
   const lowItems = InventoryCore.getLowStockItems();
-  
+
   if (lowItems.length === 0) {
     ui.alert('✅ All Good', 'No low stock items to report.', ui.ButtonSet.OK);
     return;
   }
-  
+
   let message = '🚨 <b>LOW STOCK ALERT</b> 🚨\n';
   message += 'The following items require your attention:\n\n';
-  
+
   lowItems.forEach(item => {
     message += `🏢 <b>Cabang: ${item.branch}</b>\n📦 <b>${item.name}</b>\nID: <code>${item.id}</code>\nRemaining: <b>${item.stock}</b>\n\n`;
   });
-  
+
   message += '<i>Sent from Automated Inventory System</i>';
-  
+
   try {
     TelegramService.sendMessage(message);
     ui.alert('✅ Success', 'Low stock alert sent to Telegram.', ui.ButtonSet.OK);
@@ -361,17 +361,17 @@ function checkAndSendTelegramSilent() {
 // LEVEL 3: Inbox Watcher (Process emails automatically)
 function processIncomingEmails() {
   try {
-    // Search for unread emails with a specific label or subject. 
+    // Search for unread emails with a specific label or subject.
     // For general use, we search for a label "inventory-ai"
     const labelName = 'inventory-ai';
     let label = GmailApp.getUserLabelByName(labelName);
     if (!label) {
       label = GmailApp.createLabel(labelName);
     }
-    
+
     const threads = label.getThreads(0, 10);
     let processedCount = 0;
-    
+
     threads.forEach(thread => {
       if (thread.isUnread()) {
         const messages = thread.getMessages();
@@ -379,33 +379,33 @@ function processIncomingEmails() {
         let body = lastMessage.getPlainBody();
         const sender = lastMessage.getFrom();
         const attachments = lastMessage.getAttachments();
-        
+
         attachments.forEach(att => {
           const mimeType = att.getContentType();
           const name = att.getName();
-          
+
           if (mimeType === 'text/csv' || name.toLowerCase().endsWith('.csv')) {
             body += `\n\n[Attachment: ${name}]\n`;
             body += att.getDataAsString();
-          } 
-          else if (mimeType === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' || 
-                   mimeType === 'application/vnd.ms-excel' || 
-                   name.toLowerCase().endsWith('.xlsx') || 
+          }
+          else if (mimeType === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' ||
+                   mimeType === 'application/vnd.ms-excel' ||
+                   name.toLowerCase().endsWith('.xlsx') ||
                    name.toLowerCase().endsWith('.xls')) {
             try {
               const blob = att.copyBlob();
               const fileConfig = { title: "Temp_AI_Excel", mimeType: MimeType.GOOGLE_SHEETS };
               const newFile = Drive.Files.insert(fileConfig, blob);
-              
+
               const tempSs = SpreadsheetApp.openById(newFile.id);
               const tempSheet = tempSs.getSheets()[0];
               const data = tempSheet.getDataRange().getDisplayValues(); // use DisplayValues to keep formatting
-              
+
               body += `\n\n[Attachment Excel: ${name}]\n`;
               data.forEach(row => {
                 body += row.join(" | ") + "\n";
               });
-              
+
               DriveApp.getFileById(newFile.id).setTrashed(true);
             } catch (err) {
               console.error("Failed to parse Excel attachment: " + err.message);
@@ -413,7 +413,7 @@ function processIncomingEmails() {
             }
           }
         });
-        
+
         // Extract sender email specifically
         const senderEmail = (sender.match(/<(.+)>/) || [, sender])[1];
         const senderName = sender.replace(/<.*>/g, "").trim() || sender;
@@ -637,7 +637,7 @@ function processIncomingEmails() {
         }
       }
     });
-    
+
     if (processedCount > 0) {
       console.log(`Processed ${processedCount} email threads.`);
     }
@@ -679,11 +679,11 @@ function runMonthlyAnalysis() {
  */
 function doGet(e) {
   const creds = WhatsAppService.getCredentials();
-  
+
   if (e.parameter['hub.mode'] === 'subscribe' && e.parameter['hub.verify_token'] === creds.verifyToken) {
     return ContentService.createTextOutput(e.parameter['hub.challenge']);
   }
-  
+
   return ContentService.createTextOutput("Forbidden: Invalid Verify Token").setStatusCode(403);
 }
 
@@ -701,17 +701,17 @@ function installEmailTrigger() {
         break;
       }
     }
-    
+
     if (exists) {
       ui.alert("✅ Sudah Aktif", "Sistem Auto-Pilot Email sudah aktif sebelumnya!", ui.ButtonSet.OK);
       return;
     }
-    
+
     ScriptApp.newTrigger("processIncomingEmails")
       .timeBased()
       .everyHours(1)
       .create();
-      
+
     ui.alert("🚀 Berhasil!", "Sistem Auto-Pilot Email berhasil diaktifkan.\nAI akan mengecek kotak masuk email Anda setiap 1 jam sekali secara otomatis tanpa Anda perlu menekan tombol apa pun.", ui.ButtonSet.OK);
   } catch (e) {
     ui.alert("� � Error", "Gagal mengaktifkan trigger: " + e.message, ui.ButtonSet.OK);
@@ -730,7 +730,7 @@ function showOnboardingDialog() {
 
 function processOnboarding(formObj) {
   if (!formObj.new_item_name) throw new Error("Nama Barang wajib diisi");
-  
+
   const parsed = {
     item_new: true,
     new_item_name: formObj.new_item_name,
@@ -738,7 +738,7 @@ function processOnboarding(formObj) {
     new_price: formObj.new_price || 0,
     quantity: formObj.quantity || 0
   };
-  
+
   const rowObj = _createNewItemRow(parsed);
   if (rowObj && rowObj.row) {
     const sh = _getSheet(SHEETS.INVENTORY);
@@ -764,16 +764,16 @@ function testEmailIntegration() {
     if (typeof _processWithAI === "undefined") {
        throw new Error("Fungsi _processWithAI tidak ditemukan di sistem. Pastikan file Agent tersedia.");
     }
-    
+
     // Simulasi payload email
     const dummyEmail = Session.getActiveUser().getEmail() || "test@example.com";
     const dummySubject = "Laporan Stok Dummy";
     const dummyBody = "Ada barang masuk 10 unit laptop asus";
     const fullContext = "Subject: " + dummySubject + "\n\nBody: " + dummyBody;
-    
+
     // Meneruskan ke AI Agent
     _processWithAI(dummyEmail, fullContext, "Penguji Sistem", "Email", null);
-    
+
     ui.alert("✅ Pengujian Berhasil", "Sistem berhasil meneruskan pesan simulasi ke AI.\n\nSilakan periksa kotak masuk Email Anda atau chat Telegram untuk melihat balasan dari AI.", ui.ButtonSet.OK);
   } catch (err) {
     ui.alert("❌ Pengujian Gagal", "Pesan Error: " + err.message, ui.ButtonSet.OK);

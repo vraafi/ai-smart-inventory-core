@@ -237,7 +237,7 @@ function _activateSuccess(key, isAdmin) {
   props.setProperty("LICENSE_KEY", key);
   props.setProperty("IS_ADMIN", isAdmin ? "true" : "false");
   props.setProperty("ACTIVATED_AT", new Date().toISOString());
-  
+
   // Automagically bind the Sheet ID during activation so the user doesn't have to do it manually!
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   if (ss) {

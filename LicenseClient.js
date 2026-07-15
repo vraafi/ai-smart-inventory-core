@@ -55,7 +55,7 @@ var LicenseClient = {
 
     try {
       var url = serverUrl + "?action=validate&key=" + encodeURIComponent(licenseKey) + "&sid=" + encodeURIComponent(this.getMySheetId());
-      var fetchOptions = { 
+      var fetchOptions = {
         muteHttpExceptions: true,
         headers: {
           "Bypass-Tunnel-Reminder": "true",
@@ -143,10 +143,10 @@ function promptLicenseActivation() {
       ui.alert('Error Koneksi', 'Sistem gagal menghubungi server lisensi. Sepertinya URL Server yang Anda masukkan sebelumnya salah (Anda mungkin memasukkan Kode Lisensi ke kolom URL Server).\n\nSistem telah mereset pengaturan Anda. Silakan klik menu Aktivasi Lisensi lagi dan masukkan URL yang berawalan "https://script.google.com/..." di Langkah 1.', ui.ButtonSet.OK);
       return;
     }
-    
+
     var responseText = response.getContentText();
     var result;
-    
+
     try {
       result = JSON.parse(responseText);
     } catch (parseError) {
