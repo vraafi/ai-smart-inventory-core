@@ -20,7 +20,7 @@
 //    • custom       → any OpenAI-compatible endpoint
 //  ─────────────────────────────────────────────────────────
 //  Native Format (separate handler):
-//    • gemini       → gemini-1.5-flash, gemini-1.5-pro, gemini-2.0 (FREE)
+//    • gemini       → gemini-2.5-flash, gemini-2.5-pro, gemini-2.0 (FREE)
 //    • anthropic    → claude-3.5-sonnet, claude-3-haiku
 //    • huggingface  → any HuggingFace inference endpoint
 //  ─────────────────────────────────────────────────────────
@@ -104,8 +104,8 @@ const AI_PROVIDERS_CONFIG = {
     name: "Google Gemini",
     url: "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
     format: "gemini",
-    defaultModel: "gemini-1.5-flash",
-    models: ["gemini-1.5-flash", "gemini-1.5-pro", "gemini-2.0-flash-exp", "gemini-1.0-pro"],
+    defaultModel: "gemini-2.5-flash",
+    models: ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.5-flash", "gemini-2.5-pro"],
     propKey: "AI_GEMINI_KEY",
     modelProp: "AI_GEMINI_MODEL",
     docs: "https://aistudio.google.com/apikey",
@@ -236,7 +236,7 @@ const AI_PROVIDERS_CONFIG = {
     url: "{baseUrl}/v1/chat/completions",
     format: "openai",
     defaultModel: "default",
-    models: ["default", "llama3", "gpt-4o", "gemini-pro"],
+    models: ["default", "llama3", "gpt-4o", "gemini-2.5-pro"],
     propKey: "AI_9ROUTER_URL",     // stores the Ngrok/Cloudflare URL
     modelProp: "AI_9ROUTER_MODEL",
     docs: "https://github.com/9router/9router",
@@ -310,19 +310,18 @@ function _callProvider(config, prompt, systemPrompt) {
 //             and ANY other OpenAI-compatible API
 function _callOpenAICompatible(config, prompt, systemPrompt) {
   const props = PropertiesService.getScriptProperties();
-  let apiKey = props.getProperty(config.propKey) || "";
-  const model = props.getProperty(config.modelProp) || config.defaultModel;
+  let apiKey = (props.getProperty(config.propKey) || "").replace(/\s+/g, "");
+  const model = (props.getProperty(config.modelProp) || config.defaultModel).replace(/\s+/g, "");
 
   // For custom endpoint, apiKey prop stores the base URL
   let url = config.url;
   if (config.name === "Custom (OpenAI-Compatible)") {
-    const baseUrl = (apiKey || "").replace(/\/$/, "");
-    apiKey = props.getProperty("AI_CUSTOM_API_KEY") || "";
-    url = baseUrl + "/v1/chat/completions";
+    url = (props.getProperty(config.propKey) || "").replace(/\s+/g, "");
+    apiKey = (props.getProperty("AI_CUSTOM_API_KEY") || "").replace(/\s+/g, "");
+    url = url.replace(/\/$/, "") + "/v1/chat/completions";
   } else if (config.name === "9router (Local Proxy)") {
-    const baseUrl = (apiKey || "").replace(/\/$/, "");
-    apiKey = props.getProperty("AI_CUSTOM_API_KEY") || "";
-    url = baseUrl + "/v1/chat/completions";
+    url = (props.getProperty(config.propKey) || "").replace(/\/$/, "").replace(/\s+/g, "") + "/v1/chat/completions";
+    apiKey = (props.getProperty("AI_CUSTOM_API_KEY") || "").replace(/\s+/g, "");
   } else if (config.name === "Hugging Face") {
     url = url.replace("{model}", model);
   }
@@ -350,8 +349,9 @@ function _callOpenAICompatible(config, prompt, systemPrompt) {
     max_tokens: 1024,
   };
 
-  // Force JSON response where supported (OpenAI, Groq, etc.)
-  if (["openai", "groq", "together", "deepseek"].includes(config.propKey.replace("AI_", "").replace("_KEY", "").toLowerCase())) {
+  // Force JSON response where supported (OpenAI, Groq, Together, 9router, etc.)
+  const providerKey = config.propKey.replace("AI_", "").replace("_KEY", "").toLowerCase();
+  if (["openai", "groq", "together", "deepseek", "9router_url", "custom_url"].includes(providerKey)) {
     payload.response_format = { type: "json_object" };
   }
 
@@ -377,8 +377,8 @@ function _callOpenAICompatible(config, prompt, systemPrompt) {
 // ─── GOOGLE GEMINI HANDLER ────────────────────────────────────
 function _callGeminiProvider(config, prompt, systemPrompt) {
   const props  = PropertiesService.getScriptProperties();
-  const apiKey = props.getProperty(config.propKey);
-  const model  = props.getProperty(config.modelProp) || config.defaultModel;
+  const apiKey = (props.getProperty(config.propKey) || "").replace(/\s+/g, "");
+  const model  = (props.getProperty(config.modelProp) || config.defaultModel).replace(/\s+/g, "");
   const url    = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
 
   let combinedText = "";
@@ -390,7 +390,11 @@ function _callGeminiProvider(config, prompt, systemPrompt) {
     contentType: "application/json",
     payload: JSON.stringify({
       contents: [{ parts: [{ text: combinedText }] }],
-      generationConfig: { temperature: 0.1, maxOutputTokens: 1024 },
+      generationConfig: { 
+        temperature: 0.1, 
+        maxOutputTokens: 1024,
+        responseMimeType: "application/json"
+      },
       safetySettings: [
         { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
         { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
@@ -401,14 +405,22 @@ function _callGeminiProvider(config, prompt, systemPrompt) {
 
   const json = _safeParseJSON(resp.getContentText());
   if (json.error) throw new Error(json.error.message);
-  return json.candidates[0].content.parts[0].text;
+  let fullText = "";
+  if (json.candidates && json.candidates[0] && json.candidates[0].content && json.candidates[0].content.parts) {
+    const parts = json.candidates[0].content.parts;
+    const finalPart = parts.find(p => !p.thought) || parts[parts.length - 1];
+    if (finalPart && finalPart.text) {
+      fullText = finalPart.text;
+    }
+  }
+  return fullText.trim();
 }
 
 // ─── ANTHROPIC CLAUDE HANDLER ────────────────────────────────
 function _callAnthropicProvider(config, prompt, systemPrompt) {
   const props  = PropertiesService.getScriptProperties();
-  const apiKey = props.getProperty(config.propKey);
-  const model  = props.getProperty(config.modelProp) || config.defaultModel;
+  const apiKey = (props.getProperty(config.propKey) || "").replace(/\s+/g, "");
+  const model  = (props.getProperty(config.modelProp) || config.defaultModel).replace(/\s+/g, "");
 
   const body = {
     model: model,
@@ -436,8 +448,8 @@ function _callAnthropicProvider(config, prompt, systemPrompt) {
 // ─── OLLAMA (LOCAL) HANDLER ───────────────────────────────────
 function _callOllamaProvider(config, prompt, systemPrompt) {
   const props   = PropertiesService.getScriptProperties();
-  const baseUrl = (props.getProperty(config.propKey) || "http://localhost:11434").replace(/\/$/, "");
-  const model   = props.getProperty(config.modelProp) || config.defaultModel;
+  const baseUrl = (props.getProperty(config.propKey) || "http://localhost:11434").replace(/\/$/, "").replace(/\s+/g, "");
+  const model   = (props.getProperty(config.modelProp) || config.defaultModel).replace(/\s+/g, "");
 
   const messages = [];
   if (systemPrompt) messages.push({ role: "system", content: systemPrompt });
@@ -615,24 +627,28 @@ function showAIProviderSettings() {
 // ─── SAVE AI SETTINGS ─────────────────────────────────────────
 function saveUniversalAISettings(data) {
   const props = PropertiesService.getScriptProperties();
-  props.setProperty("AI_PROVIDER", data.provider || "auto");
+  const bulkProps = {};
+  
+  bulkProps["AI_PROVIDER"] = data.provider || "auto";
 
   Object.entries(AI_PROVIDERS_CONFIG).forEach(([key, cfg]) => {
     const keyVal   = data["key_" + key]   || "";
     const modelVal = data["model_" + key] || cfg.defaultModel;
-    if (keyVal)   props.setProperty(cfg.propKey,   keyVal);
-    if (modelVal) props.setProperty(cfg.modelProp, modelVal);
+    if (keyVal)   bulkProps[cfg.propKey]   = keyVal;
+    if (modelVal) bulkProps[cfg.modelProp] = modelVal;
   });
 
-  if (data.customApiKey) props.setProperty("AI_CUSTOM_API_KEY", data.customApiKey);
+  if (data.customApiKey) bulkProps["AI_CUSTOM_API_KEY"] = data.customApiKey;
+  
+  props.setProperties(bulkProps);
 }
 
 // ─── TEST AI CONNECTION ────────────────────────────────────────
 function testAIConnection(providerName, formData) {
   if (providerName === "9router") {
     try {
-      const baseUrl = PropertiesService.getScriptProperties().getProperty("AI_9ROUTER_URL").replace(/\/$/, "");
-      const apiKey = PropertiesService.getScriptProperties().getProperty("AI_CUSTOM_API_KEY");
+      const baseUrl = (PropertiesService.getScriptProperties().getProperty("AI_9ROUTER_URL") || "").replace(/\/$/, "").replace(/\s+/g, "");
+      const apiKey = (PropertiesService.getScriptProperties().getProperty("AI_CUSTOM_API_KEY") || "").replace(/\s+/g, "");
       const resp = UrlFetchApp.fetch(baseUrl + "/v1/models", {
         headers: {
           "Authorization": "Bearer " + apiKey,
@@ -661,7 +677,15 @@ function testAIConnection(providerName, formData) {
     } else {
       result = _callAIAuto(testPrompt, null);
     }
-    const parsed = _safeParseJSON(result.replace(/```json\n?|\n?```/g, "").trim());
+    
+    // Some models return noisy text (e.g. repeating the prompt). Extract the JSON block:
+    let cleanJson = result.replace(/```json\n?|\n?```/g, "").trim();
+    const match = cleanJson.match(/\{[\s\S]*\}/);
+    if (match) {
+      cleanJson = match[0];
+    }
+
+    const parsed = _safeParseJSON(cleanJson);
     const usedProvider = providerName === "auto" ? "(auto)" : AI_PROVIDERS_CONFIG[providerName]?.name;
     return `${parsed.message} — Provider: ${usedProvider}`;
   } catch (err) {
@@ -686,24 +710,36 @@ function showProviderList() {
 // Existing AGENT.gs code calls _callGemini() — keep it working
 function _callGemini(prompt, apiKey) {
   const props = PropertiesService.getScriptProperties();
-  const key   = apiKey || props.getProperty("AI_GEMINI_KEY") || props.getProperty("GEMINI_KEY");
+  const key   = (apiKey || props.getProperty("AI_GEMINI_KEY") || props.getProperty("GEMINI_KEY") || "").replace(/\s+/g, "");
   if (!key) {
     // Try universal AI if no Gemini key
     return callAI(prompt, null);
   }
-  const model = props.getProperty("AI_GEMINI_MODEL") || "gemini-1.5-flash";
+  const model = (props.getProperty("AI_GEMINI_MODEL") || "gemini-2.5-flash").replace(/\s+/g, "");
   const url   = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`;
   const resp  = UrlFetchApp.fetch(url, {
     method: "post",
     contentType: "application/json",
     payload: JSON.stringify({
       contents: [{ parts: [{ text: prompt }] }],
-      generationConfig: { temperature: 0.1, maxOutputTokens: 1024 },
+      generationConfig: { 
+        temperature: 0.1, 
+        maxOutputTokens: 1024,
+        responseMimeType: "application/json"
+      },
     }),
     muteHttpExceptions: true,
     });
   const json = _safeParseJSON(resp.getContentText());
   if (json.error) throw new Error(json.error.message);
-  return json.candidates[0].content.parts[0].text;
+  let fullText = "";
+  if (json.candidates && json.candidates[0] && json.candidates[0].content && json.candidates[0].content.parts) {
+    const parts = json.candidates[0].content.parts;
+    const finalPart = parts.find(p => !p.thought) || parts[parts.length - 1];
+    if (finalPart && finalPart.text) {
+      fullText = finalPart.text;
+    }
+  }
+  return fullText.trim();
 }
 function test9RouterConnection() { const url = "https://vast-webs-occur.loca.lt/v1/models"; const resp = UrlFetchApp.fetch(url, { headers: { "Authorization": "Bearer 123456", "Bypass-Tunnel-Reminder": "true" } }); console.log("RESPONSE FROM GOOGLE SHEETS: " + resp.getContentText()); return resp.getContentText(); }
