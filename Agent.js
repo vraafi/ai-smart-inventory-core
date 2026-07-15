@@ -195,7 +195,7 @@ function pollTelegram() {
 function pollEmails() {
   debugLog("pollEmails trigger fired!");
   try {
-    const threads = GmailApp.search(`is:unread in:anywhere (subject:"Nexus AI Report" OR subject:"AI Inventory Notification" OR subject:"Inventory" OR subject:"Update")`, 0, 5);
+    const threads = GmailApp.search(`is:unread in:anywhere (subject:"Nexus AI Report" OR subject:"AI Inventory Notification" OR subject:"Inventory" OR subject:"Update" OR subject:"Laporan" OR subject:"Stok" OR subject:"Stock")`, 0, 5);
     const props = PropertiesService.getScriptProperties();
     let processed = props.getProperty("PROCESSED_EMAILS") || "";
     
@@ -204,7 +204,6 @@ function pollEmails() {
     threads.forEach(thread => {
       thread.getMessages().forEach(msg => {
         if (!msg.isUnread()) {
-          // debugLog(`Skipping message ${msg.getId()} because it is already read.`);
           return;
         }
         const msgId = msg.getId();
@@ -246,7 +245,11 @@ function pollEmails() {
         }
 
         // Process with AI and pass the senderEmail so it can reply
-        _processWithAI(senderEmail, fullContext, senderName, "Email");
+        try {
+          _processWithAI(senderEmail, fullContext, senderName, "Email");
+        } catch(aiErr) {
+          debugLog(`AI Processing failed for msg ${msgId}: ${aiErr.message}`);
+        }
         
         // Mark as processed using PropertiesService and also mark Read in Gmail for hygiene
         processed += "," + msgId;
@@ -834,7 +837,10 @@ function _sendWhatsApp(phone, text) {
   // --- NOTIFICATION HANDLERS --------------------------------------------------
   function _sendEmailNotification(recipient, subject, body) {
     try {
-      GmailApp.sendEmail(recipient, subject, body);
+      // The body might be plain text from the AI but htmlBody requires <br> for newlines.
+      const isHtml = body.includes('<br>') || body.includes('<div>') || body.includes('<p>');
+      const htmlBody = isHtml ? body : body.replace(/\n/g, '<br>');
+      GmailApp.sendEmail(recipient, subject, body, { htmlBody: htmlBody });
     } catch (e) {
       debugLog("EMAIL FAILED TO SEND: " + e.message);
       const adminId = PropertiesService.getScriptProperties().getProperty("ADMIN_CHAT_ID");
