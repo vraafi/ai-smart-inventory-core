@@ -105,7 +105,7 @@ const AI_PROVIDERS_CONFIG = {
     url: "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
     format: "gemini",
     defaultModel: "gemini-2.5-flash",
-    models: ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.5-flash", "gemini-2.5-pro"],
+    models: ["gemini-2.5-flash", "gemini-2.5-pro", "gemma-4-31b-it"],
     propKey: "AI_GEMINI_KEY",
     modelProp: "AI_GEMINI_MODEL",
     docs: "https://aistudio.google.com/apikey",
@@ -385,16 +385,22 @@ function _callGeminiProvider(config, prompt, systemPrompt) {
   if (systemPrompt) combinedText += "System: " + systemPrompt + "\n\n";
   combinedText += prompt;
 
+  let generationConfig = {
+    temperature: 0.1,
+    maxOutputTokens: 1024,
+    responseMimeType: "application/json"
+  };
+
+  if (model.includes("gemma")) {
+    delete generationConfig.responseMimeType;
+  }
+
   const resp = UrlFetchApp.fetch(url, {
     method: "post",
     contentType: "application/json",
     payload: JSON.stringify({
       contents: [{ parts: [{ text: combinedText }] }],
-      generationConfig: {
-        temperature: 0.1,
-        maxOutputTokens: 1024,
-        responseMimeType: "application/json"
-      },
+      generationConfig: generationConfig,
       safetySettings: [
         { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
         { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
@@ -717,16 +723,22 @@ function _callGemini(prompt, apiKey) {
   }
   const model = (props.getProperty("AI_GEMINI_MODEL") || "gemini-2.5-flash").replace(/\s+/g, "");
   const url   = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`;
+  let generationConfig = {
+    temperature: 0.1,
+    maxOutputTokens: 1024,
+    responseMimeType: "application/json"
+  };
+
+  if (model.includes("gemma")) {
+    delete generationConfig.responseMimeType;
+  }
+
   const resp  = UrlFetchApp.fetch(url, {
     method: "post",
     contentType: "application/json",
     payload: JSON.stringify({
       contents: [{ parts: [{ text: prompt }] }],
-      generationConfig: {
-        temperature: 0.1,
-        maxOutputTokens: 1024,
-        responseMimeType: "application/json"
-      },
+      generationConfig: generationConfig,
     }),
     muteHttpExceptions: true,
     });
