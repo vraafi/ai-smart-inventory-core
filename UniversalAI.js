@@ -754,4 +754,36 @@ function _callGemini(prompt, apiKey) {
   }
   return fullText.trim();
 }
-function test9RouterConnection() { const url = "https://vast-webs-occur.loca.lt/v1/models"; const resp = UrlFetchApp.fetch(url, { headers: { "Authorization": "Bearer 123456", "Bypass-Tunnel-Reminder": "true" } }); console.log("RESPONSE FROM GOOGLE SHEETS: " + resp.getContentText()); return resp.getContentText(); }
+function diagnoseGeminiConnection() {
+  const ui = SpreadsheetApp.getUi();
+  const props = PropertiesService.getScriptProperties();
+  const apiKey = (props.getProperty("AI_GEMINI_KEY") || props.getProperty("GEMINI_KEY") || "").replace(/\s+/g, "");
+
+  if (!apiKey) {
+    ui.alert("Diagnostics", "No Gemini API Key found in settings.", ui.ButtonSet.OK);
+    return;
+  }
+
+  const model = (props.getProperty("AI_GEMINI_MODEL") || "gemini-2.5-flash").replace(/\s+/g, "");
+
+  try {
+    const url = `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`;
+    const resp = UrlFetchApp.fetch(url, {
+      method: "get",
+      muteHttpExceptions: true
+    });
+
+    const status = resp.getResponseCode();
+    let text = resp.getContentText();
+
+    try {
+      const json = JSON.parse(text);
+      text = JSON.stringify(json, null, 2);
+    } catch(e) {}
+
+    const html = HtmlService.createHtmlOutput(`<pre style="font-size:12px;">HTTP Status: ${status}\nModel Target: ${model}\n\nResponse:\n${text}</pre>`).setWidth(600).setHeight(500);
+    ui.showModalDialog(html, 'Gemini Diagnostics');
+  } catch (err) {
+    ui.alert("Diagnostics Error", err.message, ui.ButtonSet.OK);
+  }
+}

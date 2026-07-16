@@ -42,6 +42,7 @@ function onOpen() {
     // ── Dashboard & Repair ──
     .addItem('🔄 Refresh Dashboard',             'refreshDashboardClick')
     .addItem('📊 Recalculate All Status',        'recalcAllStatus')
+    .addItem('🛠️ Diagnose Gemini Connection',     'diagnoseGeminiConnection')
     .addItem('🛠️ AI Smart Repair',               'showRepairDialog')
     .addSeparator()
     // ── Configuration ──
