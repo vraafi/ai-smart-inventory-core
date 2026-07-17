@@ -734,18 +734,25 @@ function processOnboarding(formObj) {
   const parsed = {
     item_new: true,
     new_item_name: formObj.new_item_name,
-    new_category: formObj.new_category || "General",
-    new_price: formObj.new_price || 0,
-    quantity: formObj.quantity || 0
+    new_category: formObj.new_category || formObj.category || "General",
+    new_price: formObj.new_price || formObj.sell_price || 0,
+    buy_price: formObj.buy_price || formObj.buyPrice || 0,
+    quantity: formObj.quantity || formObj.stock || 0,
+    branch: formObj.branch || ""
   };
   
   const rowObj = _createNewItemRow(parsed);
   if (rowObj && rowObj.row) {
     const sh = _getSheet(SHEETS.INVENTORY);
     if (sh) {
-       sh.getRange(rowObj.row, 6).setValue(formObj.quantity || 0); // stock
-       sh.getRange(rowObj.row, 12).setValue(formObj.buyPrice || 0); // buy price
-       sh.getRange(rowObj.row, 13).setValue(formObj.new_price || 0); // sell price
+       const headers = sh.getDataRange().getValues()[0];
+       const cmap = _getInventoryColMap(headers);
+       
+       if (cmap.stock !== -1) sh.getRange(rowObj.row, cmap.stock + 1).setValue(parsed.quantity);
+       if (cmap.stockIn !== -1) sh.getRange(rowObj.row, cmap.stockIn + 1).setValue(parsed.quantity);
+       if (cmap.buyPrice !== -1) sh.getRange(rowObj.row, cmap.buyPrice + 1).setValue(parsed.buy_price);
+       if (cmap.price !== -1) sh.getRange(rowObj.row, cmap.price + 1).setValue(parsed.new_price);
+       if (cmap.sellPrice !== -1) sh.getRange(rowObj.row, cmap.sellPrice + 1).setValue(parsed.new_price);
     }
     return { success: true, itemName: formObj.new_item_name };
   }

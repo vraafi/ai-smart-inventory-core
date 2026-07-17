@@ -1272,7 +1272,7 @@ function _getInventoryColMap(headers) {
     // General Price (if buy/sell not found)
     ["price",    h => h.includes("harga") || h.includes("price") || h.includes("cost") || h.includes("precio") || h.includes("prix") || h.includes("preis")],
     // SKU / Item Code
-    ["code",     h => h.includes("sku") || h === "kode" || h.includes("code") || h.includes("codigo") || h.includes("código") || h.includes("barcode") || h.includes("upc") || h.includes("ean") || h.includes("id")],
+    ["code",     h => h === "item code" || h === "kode barang" || h === "sku" || h === "code" || h === "barcode" || h === "upc" || h === "ean"],
     // Item Name
     ["name",     h => h.includes("nama") || h.includes("name") || h.includes("barang") || h.includes("produk") || h.includes("product") || h.includes("item") || h.includes("nombre") || h.includes("nom") || h.includes("artikel")],
     // Category
