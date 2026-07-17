@@ -1251,7 +1251,7 @@ function _getInventoryContext() {
 
 function _getInventoryColMap(headers) {
   // Default: all -1 (not found). Code MUST check !== -1 before using.
-  const map = { code: -1, name: -1, category: -1, price: -1, branch: -1, 
+  const map = { code: -1, name: -1, category: -1, price: -1, buyPrice: -1, sellPrice: -1, branch: -1, 
                 stockIn: -1, stockOut: -1, stock: -1, minStock: -1, unit: -1, status: -1 };
   if (!headers || headers.length === 0) return map;
 
@@ -1274,7 +1274,7 @@ function _getInventoryColMap(headers) {
     // SKU / Item Code
     ["code",     h => h === "item code" || h === "kode barang" || h === "sku" || h === "code" || h === "barcode" || h === "upc" || h === "ean"],
     // Item Name
-    ["name",     h => h.includes("nama") || h.includes("name") || h.includes("barang") || h.includes("produk") || h.includes("product") || h.includes("item") || h.includes("nombre") || h.includes("nom") || h.includes("artikel")],
+    ["name",     h => h.includes("nama") || (h.includes("name") && !h.includes("code")) || h.includes("barang") || h.includes("produk") || h.includes("product") || (h.includes("item") && !h.includes("code")) || h.includes("nombre") || h.includes("nom") || h.includes("artikel")],
     // Category
     ["category", h => h.includes("kategori") || h.includes("category") || h.includes("jenis") || h.includes("tipe") || h.includes("type") || h.includes("categoria") || h.includes("categoría") || h.includes("catégorie") || h.includes("kategorie")],
     // Branch / Location
@@ -1298,9 +1298,9 @@ function _getInventoryColMap(headers) {
     }
   }
 
-  // Fallbacks
-  if (map.code === -1) map.code = 0;
-  if (map.name === -1) map.name = map.code + 1;
+  // Fallbacks — never default code to 0 if column A is an ArrayFormula ID column
+  if (map.code === -1 && map.name !== -1) map.code = Math.max(0, map.name - 1);
+  if (map.name === -1 && map.code !== -1) map.name = map.code + 1;
 
   debugLog("ColMap detected: " + JSON.stringify(map) + " | Headers: " + JSON.stringify(normalized));
   return map;
