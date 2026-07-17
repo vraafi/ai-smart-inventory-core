@@ -279,7 +279,7 @@ function pollEmails() {
   LicenseClient.require();
   debugLog("pollEmails trigger fired!");
   try {
-    const threads = GmailApp.search(`is:unread in:anywhere newer_than:1d (subject:stock OR subject:inventory OR subject:update OR subject:laporan OR subject:nexus)`, 0, 5);
+    const threads = GmailApp.search(`is:unread in:anywhere newer_than:1d (subject:inventory OR subject:"AI Inventory Notification")`, 0, 5);
     const props = _getScriptProps();
     let processed = props.getProperty("PROCESSED_EMAILS") || "";
     
