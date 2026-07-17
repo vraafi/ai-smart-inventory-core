@@ -1066,7 +1066,7 @@ function _callGemini(prompt, apiKey) {
     contentType: "application/json",
     payload: JSON.stringify({
       contents: [{ parts: [{ text: prompt }] }],
-      generationConfig: { temperature: 0.1, maxOutputTokens: 1024 },
+      generationConfig: { temperature: 0.1, maxOutputTokens: 8192 },
     }),
     muteHttpExceptions: true,
   });
