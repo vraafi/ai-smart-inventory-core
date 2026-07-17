@@ -375,9 +375,6 @@ function pollEmails() {
     }
   } catch (err) { debugLog("pollEmails error: " + err); }
 }
-
-// ─── CORE AI PROCESSING ──────────────────────────────────────
-
 function _logSecurityAudit(source, senderName, senderId, messageText) {
   try {
     const ss = _getSpreadsheet();
@@ -395,8 +392,61 @@ function _processWithAI(chatId, rawText, senderName, source, bulkDataArray = nul
   _logSecurityAudit(source, senderName, chatId, rawText);
   const lowerText = rawText.toLowerCase();
   
-  if (lowerText.includes("/wipe") || lowerText.includes("/format") || lowerText.includes("/onboarding")) {
-    _sendAgentMsg(source, chatId, "❌ FITUR DIBATASI (RESTRICTED FEATURE)\\n\\nFitur registrasi barang baru, hapus data, dan format tabel telah dipindahkan secara fisik ke UI Google Sheets demi keamanan Enterprise.\\n\\nSilakan minta Admin/Bos untuk membuka Google Sheets dan menggunakan menu '📦 Smart Inventory'.");
+  // ─── SECURITY GATE: /wipe & /format require admin PIN ───
+  if (lowerText.includes("/wipe") || lowerText.includes("/format")) {
+    const pinMatch = rawText.match(/PIN[:\s]*(\d{4,8})/i);
+    const storedPin = _getScriptProps().getProperty("ADMIN_WIPE_PIN") || "1234";
+    
+    if (!pinMatch) {
+      _sendAgentMsg(source, chatId, "🔐 VERIFIKASI KEAMANAN DIPERLUKAN\n\nPerintah /wipe dan /format membutuhkan PIN Admin.\n\nFormat: /wipe PIN:1234 [perintah Anda]\nContoh: /wipe PIN:1234 hapus semua data transaksi\n\nHubungi Admin untuk mendapatkan PIN.");
+      return;
+    }
+    
+    if (pinMatch[1] !== storedPin) {
+      _sendAgentMsg(source, chatId, "❌ PIN SALAH! Akses ditolak. Hubungi Admin untuk PIN yang benar.");
+      _logSecurityAudit(source, senderName, chatId, "[WIPE PIN FAILED] " + rawText);
+      return;
+    }
+    
+    // PIN correct - strip the PIN from text before processing
+    const cleanText = rawText.replace(/PIN[:\s]*\d{4,8}/i, "").trim();
+    const isWipe = lowerText.includes("/wipe");
+    const commandText = cleanText.replace(/\/(wipe|format)/i, "").trim();
+    
+    if (commandText === "") {
+      // Default wipe: clear all inventory & transaction data
+      if (isWipe) {
+        try {
+          const ss = _getSpreadsheet();
+          let wiped = 0;
+          const invSh = ss.getSheetByName("Inventory");
+          if (invSh) { invSh.getRange("A2:H" + invSh.getMaxRows()).clearContent(); invSh.getRange("J2:M" + invSh.getMaxRows()).clearContent(); wiped++; }
+          const trxSh = ss.getSheetByName("Transactions");
+          if (trxSh) { trxSh.getRange("A2:N" + trxSh.getMaxRows()).clearContent(); wiped++; }
+          _sendAgentMsg(source, chatId, "✅ WIPE BERHASIL! " + wiped + " tabel telah dibersihkan (rumus tetap aman).");
+        } catch(e) {
+          _sendAgentMsg(source, chatId, "❌ Gagal melakukan Wipe: " + e.message);
+        }
+      }
+      return;
+    }
+    
+    // AI-powered wipe/format with specific instructions
+    try {
+      const actionArr = AIAgent.parseFormattingAI(commandText);
+      if (!actionArr || (Array.isArray(actionArr) && actionArr.length === 0)) {
+        _sendAgentMsg(source, chatId, "❌ AI gagal menerjemahkan permintaan Anda menjadi tindakan valid.");
+        return;
+      }
+      const actions = Array.isArray(actionArr) ? actionArr : [actionArr];
+      if (isWipe) {
+        _executeWipeAction(actions, source, chatId);
+      } else {
+        _executeFormatAction(actions, source, chatId);
+      }
+    } catch(e) {
+      _sendAgentMsg(source, chatId, "❌ Error: " + e.message);
+    }
     return;
   }
 
