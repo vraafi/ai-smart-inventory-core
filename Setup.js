@@ -815,7 +815,7 @@ function _createNewItemRow(parsed) {
   
   // Count actual items (for SKU generation)
   let itemCount = firstEmptyIndex - 1; // subtract header row
-  const sku = "SKU-" + ("000" + (itemCount + 1)).slice(-4);
+  const sku = parsed.item_code || ("SKU-" + ("000" + (itemCount + 1)).slice(-4));
   
   const itemName = parsed.new_item_name || parsed.item_name || "New Item";
   console.log("[ONBOARDING] Writing SKU=" + sku + " Name=" + itemName + " to row " + targetRow);
@@ -1288,7 +1288,7 @@ function _getInventoryContext() {
 function _getInventoryColMap(headers) {
   // Default: all -1 (not found). Code MUST check !== -1 before using.
   const map = { code: -1, name: -1, category: -1, price: -1, buyPrice: -1, sellPrice: -1, branch: -1, 
-                stockIn: -1, stockOut: -1, stock: -1, minStock: -1, unit: -1, status: -1 };
+                stockIn: -1, stockOut: -1, stock: -1, minStock: -1, initialStock: -1, unit: -1, status: -1 };
   if (!headers || headers.length === 0) return map;
 
   // Normalize all headers once
@@ -1298,10 +1298,12 @@ function _getInventoryColMap(headers) {
   // Supports English, Indonesian, Spanish, French, German, and common abbreviations.
   const rules = [
     // Stock In/Out MUST be checked before generic "stock"
-    ["stockIn",  h => h.includes("stock in") || h.includes("stok masuk") || h === "masuk" || h === "in" || h.includes("entrada") || h.includes("entree") || h.includes("zugang")],
-    ["stockOut", h => h.includes("stock out") || h.includes("stok keluar") || h === "keluar" || h === "out" || h.includes("salida") || h.includes("sortie") || h.includes("abgang")],
+    ["stockIn",  h => h.includes("stock in") || h.includes("stok masuk") || h.includes("total in") || h === "masuk" || h === "in" || h.includes("entrada") || h.includes("entree") || h.includes("zugang")],
+    ["stockOut", h => h.includes("stock out") || h.includes("stok keluar") || h.includes("total out") || h === "keluar" || h === "out" || h.includes("salida") || h.includes("sortie") || h.includes("abgang")],
     // Min stock MUST be checked before generic "stock"
     ["minStock", h => (h.includes("min") && (h.includes("stock") || h.includes("stok"))) || h.includes("reorder") || h.includes("safety") || h.includes("minimo")],
+    // Initial stock (new specific rule to prevent generic stock from grabbing it)
+    ["initialStock", h => h.includes("initial") || h.includes("awal") || h.includes("mulai")],
     // Buy/Sell Prices
     ["buyPrice", h => h.includes("buy") || h.includes("beli") || h.includes("modal") || h.includes("achat") || h.includes("compra")],
     ["sellPrice", h => h.includes("sell") || h.includes("jual") || h.includes("vente") || h.includes("venta")],
@@ -1319,8 +1321,9 @@ function _getInventoryColMap(headers) {
     ["unit",     h => !h.includes("harga") && !h.includes("price") && (h === "satuan" || h === "unit" || h === "uom" || h.includes("unidad") || h.includes("unite") || h.includes("einheit"))],
     // Status
     ["status",   h => h.includes("status") || h.includes("kondisi") || h.includes("state") || h.includes("estado") || h.includes("etat")],
-    // Generic Stock / Current Stock (checked LAST so specific stock in/out/min get matched first)
-    ["stock",    h => h.includes("stock") || h.includes("stok") || h.includes("qty") || h.includes("quantity") || h.includes("jumlah") || h.includes("persediaan") || h.includes("saldo") || h.includes("inventario") || h.includes("inventaire") || h.includes("bestand") || h.includes("cantidad")],
+    // Generic Stock / Current Stock (checked LAST so specific stock in/out/min/initial get matched first)
+    // EXCLUDE 'initial' and 'awal' so it specifically targets current stock
+    ["stock",    h => !h.includes("initial") && !h.includes("awal") && (h.includes("stock") || h.includes("stok") || h.includes("qty") || h.includes("quantity") || h.includes("jumlah") || h.includes("persediaan") || h.includes("saldo") || h.includes("inventario") || h.includes("inventaire") || h.includes("bestand") || h.includes("cantidad"))],
   ];
 
   for (let i = 0; i < normalized.length; i++) {

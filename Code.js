@@ -729,17 +729,20 @@ function showOnboardingDialog() {
 }
 
 function processOnboarding(formObj) {
-  if (!formObj.new_item_name) throw new Error("Nama Barang wajib diisi");
+  if (!formObj.new_item_name && !formObj.item_name) throw new Error("Nama Barang wajib diisi");
   
   console.log("[ONBOARDING DEBUG] processOnboarding called with: " + JSON.stringify(formObj));
   
   const parsed = {
     item_new: true,
-    new_item_name: formObj.new_item_name,
+    new_item_name: formObj.new_item_name || formObj.item_name,
+    item_code: formObj.item_code || formObj.code,
     new_category: formObj.new_category || formObj.category || "General",
     new_price: formObj.new_price || formObj.sell_price || 0,
     buy_price: formObj.buy_price || formObj.buyPrice || 0,
     quantity: formObj.quantity || formObj.stock || 0,
+    min_stock: formObj.min_stock || formObj.minStock || 0,
+    unit: formObj.unit || formObj.satuan || "pcs",
     branch: formObj.branch || ""
   };
   
@@ -752,15 +755,22 @@ function processOnboarding(formObj) {
        const headers = sh.getDataRange().getValues()[0];
        const cmap = _getInventoryColMap(headers);
        // Use defensive _safeSetValue globally defined in Setup.js
-       _safeSetValue(sh, rowObj.row, cmap.stock, parsed.quantity);
-       _safeSetValue(sh, rowObj.row, cmap.stockIn, parsed.quantity);
+       
+       if (cmap.initialStock !== -1) _safeSetValue(sh, rowObj.row, cmap.initialStock, parsed.quantity);
+       if (cmap.stock !== -1) _safeSetValue(sh, rowObj.row, cmap.stock, parsed.quantity);
+       if (cmap.stockIn !== -1) _safeSetValue(sh, rowObj.row, cmap.stockIn, parsed.quantity);
+       if (cmap.stockOut !== -1) _safeSetValue(sh, rowObj.row, cmap.stockOut, 0);
+       
+       _safeSetValue(sh, rowObj.row, cmap.minStock, parsed.min_stock);
+       _safeSetValue(sh, rowObj.row, cmap.unit, parsed.unit);
+       
        _safeSetValue(sh, rowObj.row, cmap.buyPrice, parsed.buy_price);
        _safeSetValue(sh, rowObj.row, cmap.price, parsed.new_price);
        _safeSetValue(sh, rowObj.row, cmap.sellPrice, parsed.new_price);
        SpreadsheetApp.flush();
-       console.log("[ONBOARDING DEBUG] processOnboarding additional writes + flush completed");
+       console.log("[ONBOARDING DEBUG] Saved quantity to stock and stockIn");
     }
-    return { success: true, itemName: formObj.new_item_name, _debug: rowObj._debug_ssId + " | " + rowObj._debug_ssName + " | row=" + rowObj.row };
+    return { success: true, itemName: parsed.new_item_name, _debug: rowObj._debug_ssId + " | " + rowObj._debug_ssName + " | row=" + rowObj.row };
   }
   return { success: false, message: "Gagal membuat item." };
 }
