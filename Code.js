@@ -731,6 +731,8 @@ function showOnboardingDialog() {
 function processOnboarding(formObj) {
   if (!formObj.new_item_name) throw new Error("Nama Barang wajib diisi");
   
+  console.log("[ONBOARDING DEBUG] processOnboarding called with: " + JSON.stringify(formObj));
+  
   const parsed = {
     item_new: true,
     new_item_name: formObj.new_item_name,
@@ -740,6 +742,8 @@ function processOnboarding(formObj) {
     quantity: formObj.quantity || formObj.stock || 0,
     branch: formObj.branch || ""
   };
+  
+  console.log("[ONBOARDING DEBUG] parsed object: " + JSON.stringify(parsed));
   
   const rowObj = _createNewItemRow(parsed);
   if (rowObj && rowObj.row) {
@@ -753,8 +757,10 @@ function processOnboarding(formObj) {
        _safeSetValue(sh, rowObj.row, cmap.buyPrice, parsed.buy_price);
        _safeSetValue(sh, rowObj.row, cmap.price, parsed.new_price);
        _safeSetValue(sh, rowObj.row, cmap.sellPrice, parsed.new_price);
+       SpreadsheetApp.flush();
+       console.log("[ONBOARDING DEBUG] processOnboarding additional writes + flush completed");
     }
-    return { success: true, itemName: formObj.new_item_name };
+    return { success: true, itemName: formObj.new_item_name, _debug: rowObj._debug_ssId + " | " + rowObj._debug_ssName + " | row=" + rowObj.row };
   }
   return { success: false, message: "Gagal membuat item." };
 }

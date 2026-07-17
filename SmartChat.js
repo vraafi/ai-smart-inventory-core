@@ -205,18 +205,23 @@ function processSmartChat(payload) {
           
           let successCount = 0;
           let errors = [];
+          let debugInfo = "";
           for (let item of items) {
              if (!item.new_item_name) {
                 errors.push("Data tidak memiliki 'new_item_name'");
                 continue;
              }
              const result = processOnboarding(item);
-             if (result.success) successCount++;
+             if (result.success) {
+               successCount++;
+               if (!debugInfo && result._debug) debugInfo = result._debug;
+             }
              else errors.push(`${item.new_item_name}: ${result.message}`);
           }
           
           let msg = `✅ Sukses! ${successCount} barang baru berhasil diregistrasi.`;
           if (errors.length > 0) msg += `\n⚠️ Gagal meregistrasi ${errors.length} barang:\n- ` + errors.join("\n- ");
+          if (debugInfo) msg += `\n🔍 DEBUG: ${debugInfo}`;
           return msg;
        } catch (e) {
           return "❌ Error parsing onboarding AI data: " + e.message;

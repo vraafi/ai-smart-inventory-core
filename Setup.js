@@ -41,7 +41,7 @@ function _getSpreadsheet() {
     if (ss) return ss;
   } catch(e) {}
   
-  const id = PropertiesService.getScriptProperties().getProperty("SHEET_ID");
+  const id = _getScriptProps().getProperty("SHEET_ID");
   if (id) {
     try { return SpreadsheetApp.openById(id); } catch(e) {}
   }
@@ -772,53 +772,77 @@ function debugErrorsUI() {
 // ─── CREATE NEW ITEM HELPER ────────────────────────────────────────
 function _safeSetValue(sh, row, colIndex, value) {
   if (typeof row === 'number' && row > 0 && typeof colIndex === 'number' && colIndex >= 0) {
-    try {
-      sh.getRange(row, colIndex + 1).setValue(value);
-    } catch (e) {
-      console.log(`Failed setting value at row ${row}, col ${colIndex + 1}: ${e.message}`);
-    }
+    sh.getRange(row, colIndex + 1).setValue(value);
   }
 }
 
 function _createNewItemRow(parsed) {
   const sh = _getSheet(SHEETS.INVENTORY);
+  if (!sh) {
+    console.log("[ONBOARDING] _getSheet returned NULL!");
+    return null;
+  }
+  
+  // DEBUG: Log target spreadsheet
+  const parentSS = sh.getParent();
+  const ssId = parentSS ? parentSS.getId() : "UNKNOWN";
+  const ssName = parentSS ? parentSS.getName() : "UNKNOWN";
+  console.log("[ONBOARDING] Target: " + ssName + " | Sheet: " + sh.getName());
+  
   const data = sh.getDataRange().getValues();
   const cmap = _getInventoryColMap(data[0]);
+  console.log("[ONBOARDING] getDataRange rows: " + data.length);
   
-  // Find the true last row by looking for the first empty Item Code (or Item Name)
-  // This bypasses ArrayFormulas in column A that make the whole sheet look "full"
-  let trueLastRowIndex = 0;
-  for (let i = data.length - 1; i > 0; i--) {
-    let checkVal = "";
-    if (cmap.code !== -1) checkVal += data[i][cmap.code];
-    if (cmap.name !== -1) checkVal += data[i][cmap.name];
-    
-    if (String(checkVal).trim() !== "") {
-      trueLastRowIndex = i;
+  // FIX: Scan FORWARD from row 2 to find the first empty row.
+  // The old backward scan was tricked by stray data thousands of rows below.
+  // This approach finds where the contiguous data block ends.
+  let firstEmptyIndex = 1; // default: right after header (index 1 = row 2)
+  for (let i = 1; i < data.length; i++) {
+    let hasCode = cmap.code !== -1 && String(data[i][cmap.code]).trim() !== "";
+    let hasName = cmap.name !== -1 && String(data[i][cmap.name]).trim() !== "";
+    if (!hasCode && !hasName) {
+      firstEmptyIndex = i;
       break;
+    }
+    // If we reach the end of data without finding empty, target is after the last row
+    if (i === data.length - 1) {
+      firstEmptyIndex = data.length;
     }
   }
   
-  // Target row is trueLastRowIndex + 1 (0-indexed) -> trueLastRowIndex + 2 (1-indexed)
-  const targetRow = trueLastRowIndex + 2;
+  const targetRow = firstEmptyIndex + 1; // convert 0-indexed to 1-indexed sheet row
+  console.log("[ONBOARDING] firstEmptyIndex=" + firstEmptyIndex + " targetRow=" + targetRow);
   
-  // Generate SKU based on the true number of items
-  let newId = trueLastRowIndex; // header is 0, item 1 is at index 1 -> ID 1
-  const sku = "SKU-" + ("000" + (newId + 1)).slice(-4);
+  // Count actual items (for SKU generation)
+  let itemCount = firstEmptyIndex - 1; // subtract header row
+  const sku = "SKU-" + ("000" + (itemCount + 1)).slice(-4);
   
   const itemName = parsed.new_item_name || parsed.item_name || "New Item";
+  console.log("[ONBOARDING] Writing SKU=" + sku + " Name=" + itemName + " to row " + targetRow);
   
   if (targetRow > sh.getMaxRows()) {
     sh.insertRowAfter(sh.getMaxRows());
   }
 
-  // Use defensive writing to avoid Kolom/Baris terlalu kecil errors
+  // Write data
   _safeSetValue(sh, targetRow, cmap.code, sku);
   _safeSetValue(sh, targetRow, cmap.name, itemName);
   _safeSetValue(sh, targetRow, cmap.category, parsed.new_category || "General");
   _safeSetValue(sh, targetRow, cmap.price, parsed.new_price || 0);
   _safeSetValue(sh, targetRow, cmap.branch, parsed.branch || "");
   _safeSetValue(sh, targetRow, cmap.stock, 0);
+  
+  // FORCE Google Sheets to render changes immediately
+  SpreadsheetApp.flush();
+  console.log("[ONBOARDING] flush() done. Verifying...");
+  
+  // Verify write
+  try {
+    const verifyVal = sh.getRange(targetRow, cmap.code + 1).getValue();
+    console.log("[ONBOARDING] VERIFY: B" + targetRow + " = '" + verifyVal + "'");
+  } catch(e) {
+    console.log("[ONBOARDING] VERIFY FAILED: " + e.message);
+  }
   
   return {
     row: targetRow,
@@ -829,7 +853,9 @@ function _createNewItemRow(parsed) {
     minStock: 0,
     unit: "",
     buyPrice: 0,
-    sellPrice: parsed.new_price || 0
+    sellPrice: parsed.new_price || 0,
+    _debug_ssId: ssId,
+    _debug_ssName: ssName
   };
 }
 
