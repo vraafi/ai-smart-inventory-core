@@ -747,12 +747,12 @@ function processOnboarding(formObj) {
     if (sh) {
        const headers = sh.getDataRange().getValues()[0];
        const cmap = _getInventoryColMap(headers);
-       
-       if (cmap.stock !== -1) sh.getRange(rowObj.row, cmap.stock + 1).setValue(parsed.quantity);
-       if (cmap.stockIn !== -1) sh.getRange(rowObj.row, cmap.stockIn + 1).setValue(parsed.quantity);
-       if (cmap.buyPrice !== -1) sh.getRange(rowObj.row, cmap.buyPrice + 1).setValue(parsed.buy_price);
-       if (cmap.price !== -1) sh.getRange(rowObj.row, cmap.price + 1).setValue(parsed.new_price);
-       if (cmap.sellPrice !== -1) sh.getRange(rowObj.row, cmap.sellPrice + 1).setValue(parsed.new_price);
+       // Use defensive _safeSetValue globally defined in Setup.js
+       _safeSetValue(sh, rowObj.row, cmap.stock, parsed.quantity);
+       _safeSetValue(sh, rowObj.row, cmap.stockIn, parsed.quantity);
+       _safeSetValue(sh, rowObj.row, cmap.buyPrice, parsed.buy_price);
+       _safeSetValue(sh, rowObj.row, cmap.price, parsed.new_price);
+       _safeSetValue(sh, rowObj.row, cmap.sellPrice, parsed.new_price);
     }
     return { success: true, itemName: formObj.new_item_name };
   }

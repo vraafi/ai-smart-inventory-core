@@ -770,6 +770,16 @@ function debugErrorsUI() {
 }
 
 // ─── CREATE NEW ITEM HELPER ────────────────────────────────────────
+function _safeSetValue(sh, row, colIndex, value) {
+  if (typeof row === 'number' && row > 0 && typeof colIndex === 'number' && colIndex >= 0) {
+    try {
+      sh.getRange(row, colIndex + 1).setValue(value);
+    } catch (e) {
+      console.log(`Failed setting value at row ${row}, col ${colIndex + 1}: ${e.message}`);
+    }
+  }
+}
+
 function _createNewItemRow(parsed) {
   const sh = _getSheet(SHEETS.INVENTORY);
   const data = sh.getDataRange().getValues();
@@ -802,13 +812,13 @@ function _createNewItemRow(parsed) {
     sh.insertRowAfter(sh.getMaxRows());
   }
 
-  // Use individual setValue to avoid overwriting ArrayFormulas with empty strings
-  if (cmap.code !== -1) sh.getRange(targetRow, cmap.code + 1).setValue(sku);
-  if (cmap.name !== -1) sh.getRange(targetRow, cmap.name + 1).setValue(itemName);
-  if (cmap.category !== -1) sh.getRange(targetRow, cmap.category + 1).setValue(parsed.new_category || "General");
-  if (cmap.price !== -1) sh.getRange(targetRow, cmap.price + 1).setValue(parsed.new_price || 0);
-  if (cmap.branch !== -1) sh.getRange(targetRow, cmap.branch + 1).setValue(parsed.branch || "");
-  if (cmap.stock !== -1) sh.getRange(targetRow, cmap.stock + 1).setValue(0);
+  // Use defensive writing to avoid Kolom/Baris terlalu kecil errors
+  _safeSetValue(sh, targetRow, cmap.code, sku);
+  _safeSetValue(sh, targetRow, cmap.name, itemName);
+  _safeSetValue(sh, targetRow, cmap.category, parsed.new_category || "General");
+  _safeSetValue(sh, targetRow, cmap.price, parsed.new_price || 0);
+  _safeSetValue(sh, targetRow, cmap.branch, parsed.branch || "");
+  _safeSetValue(sh, targetRow, cmap.stock, 0);
   
   return {
     row: targetRow,
