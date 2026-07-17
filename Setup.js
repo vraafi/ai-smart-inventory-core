@@ -775,9 +775,26 @@ function _createNewItemRow(parsed) {
   const data = sh.getDataRange().getValues();
   const cmap = _getInventoryColMap(data[0]);
   
-  // Generate SKU
-  let newId = data.length;
-  const sku = "SKU-" + ("000" + newId).slice(-4);
+  // Find the true last row by looking for the first empty Item Code (or Item Name)
+  // This bypasses ArrayFormulas in column A that make the whole sheet look "full"
+  let trueLastRowIndex = 0;
+  for (let i = data.length - 1; i > 0; i--) {
+    let checkVal = "";
+    if (cmap.code !== -1) checkVal += data[i][cmap.code];
+    if (cmap.name !== -1) checkVal += data[i][cmap.name];
+    
+    if (String(checkVal).trim() !== "") {
+      trueLastRowIndex = i;
+      break;
+    }
+  }
+  
+  // Target row is trueLastRowIndex + 1 (0-indexed) -> trueLastRowIndex + 2 (1-indexed)
+  const targetRow = trueLastRowIndex + 2;
+  
+  // Generate SKU based on the true number of items
+  let newId = trueLastRowIndex; // header is 0, item 1 is at index 1 -> ID 1
+  const sku = "SKU-" + ("000" + (newId + 1)).slice(-4);
   
   const newRow = new Array(data[0].length).fill("");
   if (cmap.code !== -1) newRow[cmap.code] = sku;
@@ -787,10 +804,15 @@ function _createNewItemRow(parsed) {
   if (cmap.branch !== -1) newRow[cmap.branch] = parsed.branch || "";
   if (cmap.stock !== -1) newRow[cmap.stock] = 0;
   
-  sh.appendRow(newRow);
+  // Use setValues instead of appendRow to overwrite the empty strings from ArrayFormula
+  if (targetRow <= sh.getMaxRows()) {
+    sh.getRange(targetRow, 1, 1, newRow.length).setValues([newRow]);
+  } else {
+    sh.appendRow(newRow); // Fallback if we actually reached the bottom of the sheet
+  }
   
   return {
-    row: data.length + 1,
+    row: targetRow,
     code: sku,
     name: newRow[cmap.name],
     branch: newRow[cmap.branch],
