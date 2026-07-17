@@ -87,6 +87,12 @@ const AIAgent = {
 - DO NOT think step-by-step.
 - YOU MUST START YOUR ENTIRE RESPONSE WITH THE CHARACTER '[' OR '{' and END WITH ']' OR '}'.
 
+**JSON Schema / Available Commands (cmd):**
+1. UPDATE_CELL (memperbarui nilai sel yang ada)
+2. APPEND_ROW (menambah baris data transaksi/inventory baru)
+3. DELETE_ROW (menghapus baris data)
+4. ASK_USER (jika ambigu)
+
 **Rules:**
 1. "branch" MUST be the name of the store/branch mentioned. If not mentioned, set it to "Pusat".
 2. "type" MUST be exactly "IN" (restock, bought, received) or "OUT" (sold, sent, lost).
@@ -95,17 +101,17 @@ const AIAgent = {
 5. If the message mentions MULTIPLE items, output a JSON ARRAY of objects.
 6. If the message mentions only ONE item, output a single JSON object.
 7. "notes" should be a short summary of what happened.
-8. DILARANG KERAS MENGUBAH FORMAT TAMPILAN SHEET. HANYA HASILKAN OUTPUT JSON DATA TRANSAKSI SESUAI FORMAT DI BAWAH.
+8. DILARANG KERAS MENGUBAH FORMAT TAMPILAN SHEET (seperti row height, font, warna). HANYA GUNAKAN COMMAND UNTUK MENGUBAH DATA INVENTARIS/TRANSAKSI.
 9. Jika permintaan sangat membingungkan atau ambigu, keluarkan: { "cmd": "ASK_USER", "question": "Tuliskan pertanyaan spesifik Anda dalam bahasa Indonesia di sini" }
 
 **Inventory Context:**
 ${inventoryContext}
 
 **Output Format Example (single item):**
-{ "branch": "string", "itemId": "string", "type": "IN" | "OUT", "quantity": number, "notes": "string", "customerEmail": "string|null" }
+{ "cmd": "APPEND_ROW", "branch": "string", "itemId": "string", "type": "IN" | "OUT", "quantity": number, "notes": "string", "customerEmail": "string|null" }
 
 **Output Format Example (multiple items):**
-[ { "branch": "string", "itemId": "string", "type": "IN" | "OUT", "quantity": number, "notes": "string", "customerEmail": "string|null" } ]`;
+[ { "cmd": "APPEND_ROW", "branch": "string", "itemId": "string", "type": "IN" | "OUT", "quantity": number, "notes": "string", "customerEmail": "string|null" } ]`;
   },
 
   /**
