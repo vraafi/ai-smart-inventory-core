@@ -329,7 +329,14 @@ function pollEmails() {
         const senderName = from.replace(/<.*>/g, "").trim() || from;
         const senderEmail = (from.match(/<(.+)>/) || [, from])[1];
         
-        // Combine Subject and Body for AI Context
+        
+        // Anti-Loop & Anti-Bot: Ignore automated bounce emails, no-reply, and GitHub bots
+        const lowerSender = (senderEmail || "").toLowerCase();
+        if (lowerSender.includes("noreply") || lowerSender.includes("no-reply") || lowerSender.includes("mailer-daemon") || lowerSender.includes("postmaster") || lowerSender.includes("bot@") || lowerSender.includes("notifications@github.com")) {
+            msg.markRead();
+            continue;
+        }
+// Combine Subject and Body for AI Context
         let fullContext = `Subject: ${subject}\n\nBody: ${rawBody}`;
 
         // Extract Attachments
