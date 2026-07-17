@@ -796,31 +796,30 @@ function _createNewItemRow(parsed) {
   let newId = trueLastRowIndex; // header is 0, item 1 is at index 1 -> ID 1
   const sku = "SKU-" + ("000" + (newId + 1)).slice(-4);
   
-  const newRow = new Array(data[0].length).fill("");
-  if (cmap.code !== -1) newRow[cmap.code] = sku;
-  if (cmap.name !== -1) newRow[cmap.name] = parsed.new_item_name || parsed.item_name || "New Item";
-  if (cmap.category !== -1) newRow[cmap.category] = parsed.new_category || "General";
-  if (cmap.price !== -1) newRow[cmap.price] = parsed.new_price || 0;
-  if (cmap.branch !== -1) newRow[cmap.branch] = parsed.branch || "";
-  if (cmap.stock !== -1) newRow[cmap.stock] = 0;
+  const itemName = parsed.new_item_name || parsed.item_name || "New Item";
   
-  // Use setValues instead of appendRow to overwrite the empty strings from ArrayFormula
-  if (targetRow <= sh.getMaxRows()) {
-    sh.getRange(targetRow, 1, 1, newRow.length).setValues([newRow]);
-  } else {
-    sh.appendRow(newRow); // Fallback if we actually reached the bottom of the sheet
+  if (targetRow > sh.getMaxRows()) {
+    sh.insertRowAfter(sh.getMaxRows());
   }
+
+  // Use individual setValue to avoid overwriting ArrayFormulas with empty strings
+  if (cmap.code !== -1) sh.getRange(targetRow, cmap.code + 1).setValue(sku);
+  if (cmap.name !== -1) sh.getRange(targetRow, cmap.name + 1).setValue(itemName);
+  if (cmap.category !== -1) sh.getRange(targetRow, cmap.category + 1).setValue(parsed.new_category || "General");
+  if (cmap.price !== -1) sh.getRange(targetRow, cmap.price + 1).setValue(parsed.new_price || 0);
+  if (cmap.branch !== -1) sh.getRange(targetRow, cmap.branch + 1).setValue(parsed.branch || "");
+  if (cmap.stock !== -1) sh.getRange(targetRow, cmap.stock + 1).setValue(0);
   
   return {
     row: targetRow,
     code: sku,
-    name: newRow[cmap.name],
-    branch: newRow[cmap.branch],
+    name: itemName,
+    branch: parsed.branch || "",
     stock: 0,
     minStock: 0,
     unit: "",
     buyPrice: 0,
-    sellPrice: newRow[cmap.price]
+    sellPrice: parsed.new_price || 0
   };
 }
 
