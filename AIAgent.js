@@ -92,12 +92,13 @@ const AIAgent = {
 2. APPEND_ROW (menambah baris data transaksi/inventory baru)
 3. DELETE_ROW (menghapus baris data)
 4. ASK_USER (jika ambigu)
+5. UNKNOWN (jika barang tidak ditemukan)
 
 **Rules:**
 1. "branch" MUST be the name of the store/branch mentioned. If not mentioned, set it to "Pusat".
 2. "type" MUST be exactly "IN" (restock, bought, received) or "OUT" (sold, sent, lost).
 3. "quantity" MUST be a positive integer.
-4. "itemId" MUST match exactly one of the IDs from the provided Inventory Context for that branch.
+4. "itemId": Jika item tidak ditemukan dalam database, JANGAN asumsikan itu item baru kecuali terdapat kata kunci registrasi eksplisit (seperti /onboarding atau [NEW]). Jika tidak ada, kembalikan cmd "UNKNOWN" atau "NOT_FOUND". Jika ADA kata kunci /onboarding, gunakan cmd "APPEND_ROW" dan buat itemId sementara seperti "NEW_ITEM".
 5. If the message mentions MULTIPLE items, output a JSON ARRAY of objects.
 6. If the message mentions only ONE item, output a single JSON object.
 7. "notes" should be a short summary of what happened.
