@@ -36,38 +36,106 @@ function processSmartChat(payload) {
     const lowerText = text.toLowerCase();
     
     if (lowerText.startsWith("/wipe")) {
-       const wipeCmd = lowerText.replace("/wipe", "").trim();
+       const wipeCmd = text.replace(/^\/wipe/i, "").trim();
        if (wipeCmd !== "") {
-           let actionArr = AIAgent.parseFormattingAI(wipeCmd);
-           if (!Array.isArray(actionArr)) {
-             if (actionArr && actionArr.cmd === "ASK_USER") {
-                return `🤔 AI Membutuhkan Klarifikasi:\n${actionArr.question}`;
+           // AI-powered wipe: use a dedicated wipe prompt with destructive commands
+           const wipePrompt = `**Task:** Translate the user's Google Sheets DATA DELETION request into a JSON array of wipe commands.
+**CRITICAL CONSTRAINTS - VIOLATING THESE WILL CAUSE A SYSTEM CRASH:**
+- DO NOT print "User request:", "Interpretation:", "Action:", "Sheet:", or "Range:".
+- DO NOT use bullet points or asterisks (*).
+- DO NOT think step-by-step.
+- YOU MUST START YOUR ENTIRE RESPONSE WITH THE CHARACTER '[' and END WITH ']'.
+
+**Available Commands (cmd):**
+1. CLEAR_CONTENTS (butuh: sheet, range) -> hapus isi data tanpa hapus format. Contoh range: "A2:Z" untuk hapus semua baris data kecuali header.
+2. CLEAR_FORMATS (butuh: sheet, range) -> hapus format saja, data tetap.
+3. DELETE_COLUMNS (butuh: sheet, start, count) -> hapus kolom secara fisik. 'start' = nomor kolom (1=A, 2=B, ..., 10=J). 'count' = jumlah kolom yang dihapus.
+4. DELETE_ROWS (butuh: sheet, start, count) -> hapus baris secara fisik. 'start' = nomor baris. 'count' = jumlah baris.
+5. ASK_USER (butuh: question) -> jika ambigu, isi 'question' dengan pertanyaan spesifik dalam bahasa Indonesia.
+
+**Rules:**
+- "kolom nomor 10" = kolom ke-10 (kolom J). Gunakan DELETE_COLUMNS dengan start:10, count:1.
+- "hapus semua kolom dari 10 sampai 13" = DELETE_COLUMNS dengan start:10, count:4.
+- "hapus baris 5 sampai 20" = DELETE_ROWS dengan start:5, count:16.
+- "hapus semua data di inventory" = CLEAR_CONTENTS dengan range "A2:Z".
+- "hapus isi kolom J" = CLEAR_CONTENTS dengan range "J2:J".
+- Jika user menyebut nama sheet, gunakan nama itu. Default: "Inventory".
+- JANGAN pernah hapus baris 1 (header).
+
+**User Request:** "${wipeCmd}"`;
+           
+           const aiRaw = callAI(wipePrompt);
+           try {
+             let actionArr = AIAgent._extractJson(aiRaw);
+             if (!Array.isArray(actionArr)) {
+               if (actionArr && actionArr.cmd === "ASK_USER") {
+                  return `🤔 AI Membutuhkan Klarifikasi:\n${actionArr.question}`;
+               }
+               actionArr = [actionArr];
              }
-             actionArr = [actionArr];
-           }
-           if (actionArr.length === 0 || !actionArr[0] || !actionArr[0].cmd) {
-             return "❌ AI gagal menerjemahkan permintaan wipe Anda menjadi tindakan valid.";
-           }
-           const result = _executeFormatAction(actionArr, null, null);
-           if (result.success) {
-             return `✅ Sukses! Wipe/Format berbasis AI berhasil diterapkan (${result.count} tindakan).`;
-           } else {
-             return `⚠️ Wipe gagal: ${result.message}`;
+             if (actionArr.length === 0 || !actionArr[0] || !actionArr[0].cmd) {
+               return "❌ AI gagal menerjemahkan permintaan wipe Anda menjadi tindakan valid.";
+             }
+             
+             // Execute using the WIPE handler (supports DELETE_COLUMNS, DELETE_ROWS, CLEAR_CONTENTS)
+             const ss = SpreadsheetApp.getActiveSpreadsheet();
+             let executedCount = 0;
+             for (let act of actionArr) {
+               const sh = ss.getSheetByName(act.sheet || "Inventory");
+               if (!sh) continue;
+               try {
+                 if (act.cmd === "CLEAR_CONTENTS" && act.range) {
+                   let rStr = act.range;
+                   if (rStr.endsWith("Z") && !rStr.match(/\d+$/)) rStr += sh.getMaxRows();
+                   sh.getRange(rStr).clearContent(); executedCount++;
+                 }
+                 else if (act.cmd === "CLEAR_FORMATS" && act.range) {
+                   let rStr = act.range;
+                   if (rStr.endsWith("Z") && !rStr.match(/\d+$/)) rStr += sh.getMaxRows();
+                   sh.getRange(rStr).clearFormat(); executedCount++;
+                 }
+                 else if (act.cmd === "DELETE_COLUMNS" && act.start && act.count) {
+                   let count = act.count;
+                   if (act.start <= sh.getMaxColumns()) {
+                     if (act.start + count - 1 >= sh.getMaxColumns()) count = sh.getMaxColumns() - act.start + 1;
+                     if (act.start === 1 && count === sh.getMaxColumns()) count = count - 1;
+                     if (count > 0) { sh.deleteColumns(act.start, count); executedCount++; }
+                   }
+                 }
+                 else if (act.cmd === "DELETE_ROWS" && act.start && act.count) {
+                   let count = act.count;
+                   if (act.start <= sh.getMaxRows()) {
+                     if (act.start + count - 1 >= sh.getMaxRows()) count = sh.getMaxRows() - act.start + 1;
+                     if (act.start === 1 && count === sh.getMaxRows()) count = count - 1;
+                     if (count > 0) { sh.deleteRows(act.start, count); executedCount++; }
+                   }
+                 }
+               } catch(e) { /* skip invalid action */ }
+             }
+             
+             if (executedCount > 0) {
+               return `✅ Sukses! Wipe berbasis AI berhasil diterapkan (${executedCount} tindakan).`;
+             } else {
+               return "⚠️ Tidak ada tindakan wipe yang berhasil dieksekusi. Periksa nama sheet dan parameter.";
+             }
+           } catch(e) {
+             return "❌ Error parsing wipe AI data: " + e.message;
            }
        }
        
+       // Default /wipe tanpa argumen: bersihkan semua data Inventory & Transactions
        const ss = SpreadsheetApp.getActiveSpreadsheet();
        let wiped = 0;
        try {
          const invSh = ss.getSheetByName(SHEETS.INVENTORY);
          if (invSh) {
-           invSh.getRange("A2:H").clearContent();
-           invSh.getRange("J2:M").clearContent();
+           invSh.getRange("A2:H" + invSh.getMaxRows()).clearContent();
+           invSh.getRange("J2:M" + invSh.getMaxRows()).clearContent();
            wiped++;
          }
          const trxSh = ss.getSheetByName(SHEETS.TRANSACTIONS);
          if (trxSh) {
-           trxSh.getRange("A2:N").clearContent();
+           trxSh.getRange("A2:N" + trxSh.getMaxRows()).clearContent();
            wiped++;
          }
          return `✅ Sukses! Fitur /wipe berhasil membersihkan data pada ${wiped} lembar tabel tanpa menghapus rumus.`;
@@ -75,6 +143,7 @@ function processSmartChat(payload) {
          return "❌ Gagal melakukan Wipe: " + e.message;
        }
     }
+
     
     if (lowerText.startsWith("/format")) {
        try {
