@@ -694,7 +694,7 @@ CRITICAL LOCALIZATION RULE: Detect the language of the user's input. You MUST pr
   "sys_err_qty": "Translated: ❌ Could not detect a valid quantity for",
   "sys_confirm": "Translated: 🤔 AI is {conf}% confident about {name}..."
 }`;
-  const currentPrompt = `Employee report:\n${sanitizedText}`;
+  let currentPrompt = `Employee report:\n${sanitizedText}`;
 
   let parsedList;
   let rootParsed = {};

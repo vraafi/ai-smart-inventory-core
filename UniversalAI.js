@@ -381,25 +381,27 @@ function _callGeminiProvider(config, prompt, systemPrompt) {
   const model  = (props.getProperty(config.modelProp) || config.defaultModel).replace(/\s+/g, "");
   const url    = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
 
-  let combinedText = "";
-  if (systemPrompt) combinedText += "System: " + systemPrompt + "\n\n";
-  combinedText += prompt;
+  const payload = {
+    contents: [{ parts: [{ text: prompt }] }],
+    generationConfig: { 
+      temperature: 0.1, 
+      maxOutputTokens: 1024,
+      responseMimeType: "application/json"
+    },
+    safetySettings: [
+      { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
+      { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
+    ],
+  };
+
+  if (systemPrompt) {
+    payload.systemInstruction = { parts: [{ text: systemPrompt }] };
+  }
 
   const resp = UrlFetchApp.fetch(url, {
     method: "post",
     contentType: "application/json",
-    payload: JSON.stringify({
-      contents: [{ parts: [{ text: combinedText }] }],
-      generationConfig: { 
-        temperature: 0.1, 
-        maxOutputTokens: 1024,
-        responseMimeType: "application/json"
-      },
-      safetySettings: [
-        { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
-        { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
-      ],
-    }),
+    payload: JSON.stringify(payload),
     muteHttpExceptions: true,
   });
 
