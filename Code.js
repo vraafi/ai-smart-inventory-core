@@ -769,8 +769,9 @@ function processOnboarding(formObj) {
        _safeSetValue(sh, rowObj.row, cmap.sellPrice, parsed.new_price);
        SpreadsheetApp.flush();
        console.log("[ONBOARDING DEBUG] Saved quantity to stock and stockIn");
+       return { success: true, itemName: parsed.new_item_name, _debug: "row=" + rowObj.row + " | cmap=" + JSON.stringify(cmap) };
     }
-    return { success: true, itemName: parsed.new_item_name, _debug: "row=" + rowObj.row + " | cmap=" + JSON.stringify(cmap) };
+    return { success: true, itemName: parsed.new_item_name, _debug: "row=" + rowObj.row + " | sheet not found" };
   }
   return { success: false, message: "Gagal membuat item." };
 }
