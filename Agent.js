@@ -704,6 +704,7 @@ CRITICAL LOCALIZATION RULE: Detect the language of the user's input. You MUST pr
   let maxAttempts = 3;
   let attempt = 1;
   let success = false;
+  let lastError = null;
   
   while (attempt <= maxAttempts && !success) {
     try {
@@ -747,9 +748,9 @@ CRITICAL LOCALIZATION RULE: Detect the language of the user's input. You MUST pr
         throw new Error("No JSON block found");
       }
     } catch (err) {
+       lastError = err;
        if (attempt === maxAttempts) {
-           // Rethrow down to the main catch block
-           throw err;
+           break;
        }
        debugLog("❌ Parsing Error (Attempt " + attempt + "): " + err.message);
        currentPrompt = currentPrompt + "\n\n[ERROR FORMATTING (Percobaan " + attempt + ")]:\n" + err.message + "\n\nPastikan format balasan HANYA berisi struktur JSON yang valid.";
@@ -759,7 +760,7 @@ CRITICAL LOCALIZATION RULE: Detect the language of the user's input. You MUST pr
   
   try {
      if (!success && !parsedList) {
-         throw new Error("Gagal setelah " + maxAttempts + " percobaan.");
+         throw lastError || new Error("Gagal setelah " + maxAttempts + " percobaan.");
      }
   } catch (err) {
     Logger.log("AI error: " + err);
@@ -769,7 +770,7 @@ CRITICAL LOCALIZATION RULE: Detect the language of the user's input. You MUST pr
       if (!aiRaw) {
          _sendAgentMsg(source, chatId, `❌ AI Provider Error: ${err.message}`);
       } else {
-         _sendAgentMsg(source, chatId, `❌ Could not parse AI response. \n\nRAW AI OUTPUT:\n${aiRaw}\n\nPlease try a clearer format.`);
+         _sendAgentMsg(source, chatId, `❌ Could not parse AI response. \n\nRAW AI OUTPUT:\n${aiRaw.substring(0, 500)}\n\nPlease try a clearer format.\nError details: ${err.message}`);
       }
     }
     return;
