@@ -82,10 +82,9 @@ const AIAgent = {
     return `**Task:** You are an automated inventory assistant managing multiple branches. Your job is to read unstructured messages and extract inventory transaction data into JSON.
 
 **CRITICAL CONSTRAINTS - VIOLATING THESE WILL CAUSE A SYSTEM CRASH:**
-- DO NOT print "User request:", "Interpretation:", "Action:", "Sheet:", or "Range:".
-- DO NOT use bullet points or asterisks (*).
+- DO NOT print conversational filler like "Here is the JSON", "User request:", or "Action:".
 - DO NOT think step-by-step.
-- YOU MUST START YOUR ENTIRE RESPONSE WITH THE CHARACTER '[' OR '{' and END WITH ']' OR '}'.
+- YOU MUST ENCLOSE YOUR ENTIRE JSON OUTPUT WITHIN A MARKDOWN BLOCK (\`\`\`json ... \`\`\`).
 
 **JSON Schema / Available Commands (cmd):**
 1. UPDATE_CELL (memperbarui nilai sel yang ada)
