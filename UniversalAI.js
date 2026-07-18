@@ -257,7 +257,7 @@ const AI_AUTO_PRIORITY = ["gemini", "groq", "openrouter", "openai", "anthropic",
  * @returns {string} AI response text
  */
 function callAI(prompt, systemPrompt) {
-  const props = PropertiesService.getScriptProperties();
+  const props = _getScriptProps();
   const providerName = (props.getProperty("AI_PROVIDER") || "auto").toLowerCase();
 
   if (providerName === "auto") {
@@ -277,7 +277,7 @@ function _callAIAuto(prompt, systemPrompt) {
   const errors = [];
   for (const providerName of AI_AUTO_PRIORITY) {
     const config = AI_PROVIDERS_CONFIG[providerName];
-    const key = PropertiesService.getScriptProperties().getProperty(config.propKey);
+    const key = _getScriptProps().getProperty(config.propKey);
     if (!key) continue; // skip unconfigured providers
     try {
       const result = _callProvider(config, prompt, systemPrompt);
@@ -309,7 +309,7 @@ function _callProvider(config, prompt, systemPrompt) {
 //             DeepSeek, Perplexity, Fireworks, HuggingFace,
 //             and ANY other OpenAI-compatible API
 function _callOpenAICompatible(config, prompt, systemPrompt) {
-  const props = PropertiesService.getScriptProperties();
+  const props = _getScriptProps();
   let apiKey = (props.getProperty(config.propKey) || "").replace(/\s+/g, "");
   const model = (props.getProperty(config.modelProp) || config.defaultModel).replace(/\s+/g, "");
 
@@ -376,7 +376,7 @@ function _callOpenAICompatible(config, prompt, systemPrompt) {
 
 // ─── GOOGLE GEMINI HANDLER ────────────────────────────────────
 function _callGeminiProvider(config, prompt, systemPrompt) {
-  const props  = PropertiesService.getScriptProperties();
+  const props  = _getScriptProps();
   const apiKey = (props.getProperty(config.propKey) || "").replace(/\s+/g, "");
   const model  = (props.getProperty(config.modelProp) || config.defaultModel).replace(/\s+/g, "");
   const url    = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
@@ -418,7 +418,7 @@ function _callGeminiProvider(config, prompt, systemPrompt) {
 
 // ─── ANTHROPIC CLAUDE HANDLER ────────────────────────────────
 function _callAnthropicProvider(config, prompt, systemPrompt) {
-  const props  = PropertiesService.getScriptProperties();
+  const props  = _getScriptProps();
   const apiKey = (props.getProperty(config.propKey) || "").replace(/\s+/g, "");
   const model  = (props.getProperty(config.modelProp) || config.defaultModel).replace(/\s+/g, "");
 
@@ -447,7 +447,7 @@ function _callAnthropicProvider(config, prompt, systemPrompt) {
 
 // ─── OLLAMA (LOCAL) HANDLER ───────────────────────────────────
 function _callOllamaProvider(config, prompt, systemPrompt) {
-  const props   = PropertiesService.getScriptProperties();
+  const props   = _getScriptProps();
   const baseUrl = (props.getProperty(config.propKey) || "http://localhost:11434").replace(/\/$/, "").replace(/\s+/g, "");
   const model   = (props.getProperty(config.modelProp) || config.defaultModel).replace(/\s+/g, "");
 
@@ -469,7 +469,7 @@ function _callOllamaProvider(config, prompt, systemPrompt) {
 
 // ─── SETTINGS SIDEBAR (ENHANCED) ─────────────────────────────
 function showAIProviderSettings() {
-  const props = PropertiesService.getScriptProperties();
+  const props = _getScriptProps();
   const current = props.getProperty("AI_PROVIDER") || "auto";
 
   const providerRows = Object.entries(AI_PROVIDERS_CONFIG).map(([key, cfg]) => {
@@ -626,7 +626,7 @@ function showAIProviderSettings() {
 
 // ─── SAVE AI SETTINGS ─────────────────────────────────────────
 function saveUniversalAISettings(data) {
-  const props = PropertiesService.getScriptProperties();
+  const props = _getScriptProps();
   const bulkProps = {};
   
   bulkProps["AI_PROVIDER"] = data.provider || "auto";
@@ -647,8 +647,8 @@ function saveUniversalAISettings(data) {
 function testAIConnection(providerName, formData) {
   if (providerName === "9router") {
     try {
-      const baseUrl = (PropertiesService.getScriptProperties().getProperty("AI_9ROUTER_URL") || "").replace(/\/$/, "").replace(/\s+/g, "");
-      const apiKey = (PropertiesService.getScriptProperties().getProperty("AI_CUSTOM_API_KEY") || "").replace(/\s+/g, "");
+      const baseUrl = (_getScriptProps().getProperty("AI_9ROUTER_URL") || "").replace(/\/$/, "").replace(/\s+/g, "");
+      const apiKey = (_getScriptProps().getProperty("AI_CUSTOM_API_KEY") || "").replace(/\s+/g, "");
       const resp = UrlFetchApp.fetch(baseUrl + "/v1/models", {
         headers: {
           "Authorization": "Bearer " + apiKey,
@@ -695,7 +695,7 @@ function testAIConnection(providerName, formData) {
 
 // ─── SHOW ALL AVAILABLE PROVIDERS ────────────────────────────
 function showProviderList() {
-  const props = PropertiesService.getScriptProperties();
+  const props = _getScriptProps();
   const lines = ["🤖 AVAILABLE AI PROVIDERS\n"];
   Object.entries(AI_PROVIDERS_CONFIG).forEach(([key, cfg]) => {
     const hasKey = !!(props.getProperty(cfg.propKey));
@@ -709,7 +709,7 @@ function showProviderList() {
 // ─── BACKWARD COMPAT: old _callGemini still works ────────────
 // Existing AGENT.gs code calls _callGemini() — keep it working
 function _callGemini(prompt, apiKey) {
-  const props = PropertiesService.getScriptProperties();
+  const props = _getScriptProps();
   const key   = (apiKey || props.getProperty("AI_GEMINI_KEY") || props.getProperty("GEMINI_KEY") || "").replace(/\s+/g, "");
   if (!key) {
     // Try universal AI if no Gemini key

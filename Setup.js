@@ -232,7 +232,7 @@ function validateAndActivateLicense(key) {
 }
 
 function _activateSuccess(key, isAdmin) {
-  const props = PropertiesService.getScriptProperties();
+  const props = _getScriptProps();
   props.setProperty("LICENSE_ACTIVATED", "true");
   props.setProperty("LICENSE_KEY", key);
   props.setProperty("IS_ADMIN", isAdmin ? "true" : "false");
@@ -731,7 +731,7 @@ function _recordTransaction(item, type, qty, notes, source, overrideNewStock) {
   // Proactive Low Stock Alert
   if (stockAfter <= item.minStock && stockAfter < stockBefore) {
     try {
-      const adminId = PropertiesService.getScriptProperties().getProperty("ADMIN_CHAT_ID");
+      const adminId = _getScriptProps().getProperty("ADMIN_CHAT_ID");
       if (adminId) {
         let alertMsg = `🚨 *LOW STOCK ALERT* 🚨\n`;
         alertMsg += `Item: ${item.name} (${item.code})\n`;
@@ -1030,7 +1030,7 @@ function refreshDashboardClick() {
 
 // ─── LICENSE MANAGER (ADMIN ONLY) ────────────────────────────
 function showLicenseManager() {
-  const props = PropertiesService.getScriptProperties();
+  const props = _getScriptProps();
   if (props.getProperty("IS_ADMIN") !== "true") {
     const ui = SpreadsheetApp.getUi();
     const r = ui.prompt("🔑 License Manager", "Enter Admin Key to continue:", ui.ButtonSet.OK_CANCEL);
@@ -1058,7 +1058,7 @@ function showLicenseManager() {
 
 // ─── AGENT SETTINGS SIDEBAR ──────────────────────────────────
 function showAgentSettings() {
-  const props = PropertiesService.getScriptProperties();
+  const props = _getScriptProps();
   let secret = props.getProperty("WEBHOOK_SECRET");
   if (!secret) {
     secret = "SEC-" + Utilities.getUuid();
@@ -1162,7 +1162,7 @@ function simulateChat() {
 }
 
 function saveAgentSettings(data) {
-  const props = PropertiesService.getScriptProperties();
+  const props = _getScriptProps();
   if (data.wa_phone_id) props.setProperty("WA_PHONE_ID",  data.wa_phone_id);
   if (data.wa_token)    props.setProperty("WA_TOKEN",     data.wa_token);
   if (data.tg_token)    props.setProperty("TG_TOKEN",     data.tg_token);
@@ -1192,7 +1192,7 @@ function saveAgentSettings(data) {
 
 function _registerTelegramWebhook(token) {
   try {
-    const props = PropertiesService.getScriptProperties();
+    const props = _getScriptProps();
     const secret = props.getProperty("WEBHOOK_SECRET");
     const webhookUrl = ScriptApp.getService().getUrl() + "?token=" + secret;
     UrlFetchApp.fetch(`https://api.telegram.org/bot${token}/setWebhook?url=${encodeURIComponent(webhookUrl)}`, { muteHttpExceptions: true });
@@ -1201,7 +1201,7 @@ function _registerTelegramWebhook(token) {
 
 // ─── ABOUT ───────────────────────────────────────────────────
 function showAbout() {
-  const props = PropertiesService.getScriptProperties();
+  const props = _getScriptProps();
   SpreadsheetApp.getUi().alert(
     `ℹ️ ${_SYSTEM.APP_NAME}`,
     `Version: ${_SYSTEM.VERSION}\nBuild: ${_SYSTEM.BUILD_DATE}\n\n` +
@@ -1714,6 +1714,6 @@ function _colLetter(idx) {
 
 function forceSaveSheetId() {
   const id = SpreadsheetApp.getActiveSpreadsheet().getId();
-  PropertiesService.getScriptProperties().setProperty("SHEET_ID", id);
+  _getScriptProps().setProperty("SHEET_ID", id);
   SpreadsheetApp.getUi().alert("✅ SYSTEM FIXED!\nID Spreadsheet Anda berhasil dikunci: " + id + "\nSistem latar belakang kini bisa beroperasi penuh.");
 }

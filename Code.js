@@ -770,7 +770,7 @@ function processOnboarding(formObj) {
        SpreadsheetApp.flush();
        console.log("[ONBOARDING DEBUG] Saved quantity to stock and stockIn");
     }
-    return { success: true, itemName: parsed.new_item_name, _debug: rowObj._debug_ssId + " | " + rowObj._debug_ssName + " | row=" + rowObj.row };
+    return { success: true, itemName: parsed.new_item_name, _debug: "row=" + rowObj.row + " | cmap=" + JSON.stringify(cmap) };
   }
   return { success: false, message: "Gagal membuat item." };
 }
