@@ -711,8 +711,8 @@ function _recordTransaction(item, type, qty, notes, source, overrideNewStock) {
         // Fallback: strictly overwrite current stock if IN/OUT/INIT columns do not exist
         invSh.getRange(item.row, invCmap.stock + 1).setValue(stockAfter);
     } else {
-        // Guarantee that the formula exists
-        invSh.getRange(item.row, invCmap.stock + 1).setFormula(`=IF(B${item.row}="","",${cInit}${item.row}+${cIn}${item.row}-${cOut}${item.row})`);
+        // Guarantee that the formula exists without using commas (locale-safe)
+        invSh.getRange(item.row, invCmap.stock + 1).setFormula(`=${cInit}${item.row}+${cIn}${item.row}-${cOut}${item.row}`);
     }
   }
 
