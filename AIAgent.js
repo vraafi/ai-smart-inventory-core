@@ -225,11 +225,13 @@ ${inventoryContext}
 10. REPAIR_FORMULA (tidak butuh parameter) -> perbaiki #ERROR!
 11. ASK_USER (butuh: question) -> jika ambigu, isi 'question' dengan pertanyaan spesifik dalam bahasa Indonesia
 12. CLEAR_CONTENT (butuh: range) -> hapus teks tanpa hapus format
+13. SET_BORDER (butuh: range, top, left, bottom, right, vertical, horizontal, color, style) -> boolean untuk sisi (true/false), color HEX, style = "SOLID", "SOLID_MEDIUM", "SOLID_THICK", "DASHED", "DOTTED", "DOUBLE"
 
 **Rules:**
 - Jika sebut "semua kolom ke 1", asumsikan "range": "A:A" atau "startCol": 1.
 - Jika sebut huruf kolom ("kolom d"), format "range": "D:D".
 - Warna basic = "#ffffff" (bg) atau "#000000" (teks).
+- Jika user meminta "garis batas" atau "border tabel", wajib gunakan SET_BORDER.
 - Jika error/perbaiki rumus = WAJIB REPAIR_FORMULA.
 - Jika basic/kembali ke basic = WAJIB RESET_FORMAT.
 - (Jika tidak disebut sheet, default "Inventory")

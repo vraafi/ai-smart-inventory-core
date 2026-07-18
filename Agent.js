@@ -1542,6 +1542,34 @@ function _executeFormatAction(actionArr, source, chatId) {
           sh.getRange(act.range).setHorizontalAlignment(act.alignment);
           executedCount++;
         }
+        else if (act.cmd === "SET_TEXT_STYLE" && act.range) {
+          let style = SpreadsheetApp.newTextStyle()
+            .setBold(act.isBold || false)
+            .setItalic(act.isItalic || false)
+            .setStrikethrough(act.isStrikethrough || false)
+            .setUnderline(act.isUnderline || false)
+            .build();
+          sh.getRange(act.range).setTextStyle(style);
+          executedCount++;
+        }
+        else if (act.cmd === "SET_BORDER" && act.range) {
+          let styleEnum = null;
+          if (act.style) {
+            let s = act.style.toUpperCase();
+            if (s === "SOLID") styleEnum = SpreadsheetApp.BorderStyle.SOLID;
+            else if (s === "SOLID_MEDIUM") styleEnum = SpreadsheetApp.BorderStyle.SOLID_MEDIUM;
+            else if (s === "SOLID_THICK") styleEnum = SpreadsheetApp.BorderStyle.SOLID_THICK;
+            else if (s === "DASHED") styleEnum = SpreadsheetApp.BorderStyle.DASHED;
+            else if (s === "DOTTED") styleEnum = SpreadsheetApp.BorderStyle.DOTTED;
+            else if (s === "DOUBLE") styleEnum = SpreadsheetApp.BorderStyle.DOUBLE;
+          }
+          let color = act.color || "#000000";
+          sh.getRange(act.range).setBorder(
+            act.top || false, act.left || false, act.bottom || false, act.right || false,
+            act.vertical || false, act.horizontal || false, color, styleEnum
+          );
+          executedCount++;
+        }
         else if (act.cmd === "CLEAR_CONTENT" && act.range) {
           sh.getRange(act.range).clearContent();
           executedCount++;
