@@ -210,7 +210,7 @@ ${inventoryContext}
 - DO NOT print "User request:", "Interpretation:", "Action:", "Sheet:", or "Range:".
 - DO NOT use bullet points or asterisks (*).
 - DO NOT think step-by-step.
-- YOU MUST START YOUR ENTIRE RESPONSE WITH THE CHARACTER '[' and END WITH ']'.
+- YOU MUST ENCLOSE YOUR ENTIRE JSON OUTPUT WITHIN A MARKDOWN BLOCK (\`\`\`json ... \`\`\`).
 
 **Available Commands (cmd):**
 1. SET_BACKGROUND (butuh: range, color) -> color HEX format (#ffffff)
