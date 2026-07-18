@@ -694,7 +694,7 @@ CRITICAL LOCALIZATION RULE: Detect the language of the user's input. You MUST pr
   "sys_err_qty": "Translated: ❌ Could not detect a valid quantity for",
   "sys_confirm": "Translated: 🤔 AI is {conf}% confident about {name}..."
 }`;
-  let currentPrompt = `Employee report:\n${sanitizedText}`;
+  let currentPrompt = `Employee report:\n${sanitizedText}\n\n[CRITICAL INSTRUCTION: Output ONLY a valid JSON array or object. DO NOT use bullet points. DO NOT output conversational text. You must start your response with '[' or '{']`;
 
   let parsedList;
   let rootParsed = {};
