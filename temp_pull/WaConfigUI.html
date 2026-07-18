@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <base target="_top">
+    <style>
+      body {
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        padding: 20px;
+        background-color: #f8f9fa;
+        color: #333;
+      }
+      .container {
+        background: white;
+        padding: 20px;
+        border-radius: 8px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+      }
+      h2 {
+        margin-top: 0;
+        color: #128C7E;
+        font-size: 1.2rem;
+      }
+      .form-group {
+        margin-bottom: 15px;
+      }
+      label {
+        display: block;
+        margin-bottom: 5px;
+        font-weight: 600;
+        font-size: 0.9rem;
+      }
+      input[type="text"], input[type="password"] {
+        width: 100%;
+        padding: 8px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        box-sizing: border-box;
+      }
+      button {
+        background-color: #25D366;
+        color: white;
+        border: none;
+        padding: 10px 15px;
+        border-radius: 4px;
+        cursor: pointer;
+        font-weight: bold;
+        width: 100%;
+      }
+      button:hover {
+        background-color: #128C7E;
+      }
+      .help-text {
+        font-size: 0.8rem;
+        color: #666;
+        margin-top: 5px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h2>⚙️ WhatsApp Cloud API (Meta)</h2>
+      <p style="font-size: 0.85rem; color: #555;">Masukkan kredensial dari dashboard Meta for Developers.</p>
+      
+      <div class="form-group">
+        <label for="accessToken">Access Token</label>
+        <input type="password" id="accessToken" placeholder="EAABxxxxxxx...">
+      </div>
+
+      <div class="form-group">
+        <label for="phoneId">Phone Number ID</label>
+        <input type="text" id="phoneId" placeholder="123456789012345">
+      </div>
+
+      <div class="form-group">
+        <label for="verifyToken">Verify Token (Custom)</label>
+        <input type="text" id="verifyToken" placeholder="Buat kode rahasia sendiri (misal: MY_SECRET_TOKEN)">
+        <div class="help-text">Gunakan token ini saat mengatur Webhook di Meta.</div>
+      </div>
+
+      <button onclick="saveConfig()" id="saveBtn">Simpan Konfigurasi</button>
+      <div id="status" style="margin-top: 10px; font-size: 0.9rem; text-align: center;"></div>
+    </div>
+
+    <script>
+      // ── Load saved config on dialog open ──
+      google.script.run
+        .withSuccessHandler(function(cfg) {
+          if (!cfg || !cfg.success) return;
+          if (cfg.accessToken) document.getElementById('accessToken').value = cfg.accessToken;
+          if (cfg.phoneId) document.getElementById('phoneId').value = cfg.phoneId;
+          if (cfg.verifyToken) document.getElementById('verifyToken').value = cfg.verifyToken;
+        })
+        .withFailureHandler(function() {})
+        .loadWaConfig();
+
+      function saveConfig() {
+        const btn = document.getElementById('saveBtn');
+        const status = document.getElementById('status');
+        
+        const accessToken = document.getElementById('accessToken').value;
+        const phoneId = document.getElementById('phoneId').value;
+        const verifyToken = document.getElementById('verifyToken').value;
+
+        btn.disabled = true;
+        btn.innerText = "Menyimpan...";
+        status.innerText = "";
+        status.style.color = "black";
+
+        google.script.run
+          .withSuccessHandler(function(response) {
+            btn.disabled = false;
+            btn.innerText = "Simpan Konfigurasi";
+            if (response.success) {
+              status.style.color = "green";
+              status.innerText = "✅ Konfigurasi berhasil disimpan!";
+              setTimeout(() => google.script.host.close(), 2000);
+            } else {
+              status.style.color = "red";
+              status.innerText = "❌ Gagal: " + response.message;
+            }
+          })
+          .withFailureHandler(function(err) {
+            btn.disabled = false;
+            btn.innerText = "Simpan Konfigurasi";
+            status.style.color = "red";
+            status.innerText = "❌ System Error: " + err.message;
+          })
+          .saveWaConfig(accessToken, phoneId, verifyToken);
+      }
+    </script>
+  </body>
+</html>

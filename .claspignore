@@ -9,3 +9,4 @@ node_modules/**
 test_*.js
 local-*.js
 obfuscate*.js
+testMap*.js
