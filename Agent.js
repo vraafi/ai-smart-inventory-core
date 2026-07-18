@@ -395,10 +395,55 @@ function _logSecurityAudit(source, senderName, senderId, messageText) {
   }
 }
 
+// ─── STATE MANAGEMENT (KONTEKS PERCAKAPAN) ───
+function _getPendingState(chatId) {
+  try {
+    const props = _getScriptProps();
+    const stateStr = props.getProperty("STATE_" + chatId);
+    if (!stateStr) return null;
+    const state = JSON.parse(stateStr);
+    
+    // Check expiration (6 hours = 6 * 60 * 60 * 1000 ms = 21600000 ms)
+    if (new Date().getTime() - state.timestamp > 21600000) {
+      _clearPendingState(chatId);
+      return null;
+    }
+    return state;
+  } catch(e) { return null; }
+}
+
+function _savePendingState(chatId, originalText, aiQuestion) {
+  try {
+    const props = _getScriptProps();
+    const state = {
+      originalText: originalText,
+      aiQuestion: aiQuestion,
+      timestamp: new Date().getTime()
+    };
+    props.setProperty("STATE_" + chatId, JSON.stringify(state));
+  } catch(e) {}
+}
+
+function _clearPendingState(chatId) {
+  try {
+    const props = _getScriptProps();
+    props.deleteProperty("STATE_" + chatId);
+  } catch(e) {}
+}
+
 function _processWithAI(chatId, rawText, senderName, source, bulkDataArray = null) {
   _logSecurityAudit(source, senderName, chatId, rawText);
-  const lowerText = rawText.toLowerCase();
+  let lowerText = rawText.toLowerCase();
   
+  // Periksa apakah pengguna sedang ditanya sesuatu oleh AI
+  const pendingState = _getPendingState(chatId);
+  if (pendingState && pendingState.originalText) {
+    // Gabungkan teks lama dengan jawaban baru
+    rawText = pendingState.originalText + "\n[AI Asked: " + pendingState.aiQuestion + "]\n[User Answer: " + rawText + "]";
+    lowerText = rawText.toLowerCase();
+    _clearPendingState(chatId); // Bersihkan state karena sudah digabung
+  }
+
   // ─── SECURITY GATE: /wipe & /format require admin PIN ───
   if (lowerText.includes("/wipe") || lowerText.includes("/format")) {
     const pinMatch = rawText.match(/PIN[:\s]*(\d{4,8})/i);
@@ -750,8 +795,9 @@ CRITICAL LOCALIZATION RULE: Detect the language of the user's input. You MUST pr
   for (let idx = 0; idx < parsedList.length; idx++) {
     const parsed = parsedList[idx];
     debugLog("Processing tx #" + (idx+1) + ": type=" + parsed.type + " code=" + parsed.item_code + " name=" + parsed.item_name + " qty=" + parsed.quantity + " conf=" + parsed.confidence);
-    if (parsed.type === "UNKNOWN") {
+    if (parsed.type === "UNKNOWN" || parsed.item_code === "AMBIGUOUS") {
       const errMsg = rootParsed.sys_err_intent || "🤔 I couldn't determine the intent of this part of your report.\n\nPlease clarify: is this a Stock IN, Stock OUT, or Stock Adjustment?";
+      let finalMsg = errMsg;
       
       // Fraud Detection Hook
       if (parsed.notes && parsed.notes.toUpperCase().includes("FRAUD WARNING")) {
@@ -760,9 +806,16 @@ CRITICAL LOCALIZATION RULE: Detect the language of the user's input. You MUST pr
           continue;
       }
       
-      if (chatId) _sendAgentMsg(source, chatId,
-        `${errMsg}\n\nAI Note: ${parsed.ai_reasoning || "Not specified"}`
-      );
+      if (parsed.item_code === "AMBIGUOUS" && parsed.notes) {
+          finalMsg = `🤔 AI Membutuhkan Klarifikasi:\n${parsed.notes}`;
+      } else {
+          finalMsg = `${errMsg}\n\nAI Note: ${parsed.ai_reasoning || "Not specified"}`;
+      }
+      
+      if (chatId) {
+          _savePendingState(chatId, rawText, finalMsg);
+          _sendAgentMsg(source, chatId, finalMsg);
+      }
       continue;
     }
 

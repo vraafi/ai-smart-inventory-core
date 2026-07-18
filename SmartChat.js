@@ -5,7 +5,17 @@
 
 function processSmartChat(payload) {
   try {
-    const text = (payload.text || "").trim();
+    let text = (payload.text || "").trim();
+    
+    // --- STATE MANAGEMENT UNTUK WEB UI ---
+    const webUiChatId = "WEB_UI_USER";
+    const pendingState = _getPendingState(webUiChatId);
+    if (pendingState && pendingState.originalText) {
+      // Gabungkan teks lama dengan jawaban baru dari user
+      text = pendingState.originalText + "\n[AI Asked: " + pendingState.aiQuestion + "]\n[User Answer: " + text + "]";
+      _clearPendingState(webUiChatId);
+    }
+    
     let fullContext = text;
     
     // 1. Handle File Attachment
@@ -69,7 +79,10 @@ function processSmartChat(payload) {
              let actionArr = AIAgent._extractJson(aiRaw);
              if (!Array.isArray(actionArr)) {
                if (actionArr && actionArr.cmd === "ASK_USER") {
-                  return `🤔 AI Membutuhkan Klarifikasi:\n${actionArr.question}`;
+                  const webUiChatId = "WEB_UI_USER";
+                  const qMsg = `🤔 AI Membutuhkan Klarifikasi:\n${actionArr.question}`;
+                  _savePendingState(webUiChatId, fullContext, qMsg);
+                  return qMsg;
                }
                actionArr = [actionArr];
              }
@@ -160,7 +173,10 @@ function processSmartChat(payload) {
            let actionArr = AIAgent.parseFormattingAI(actualFormatCmdText);
            if (!Array.isArray(actionArr)) {
              if (actionArr && actionArr.cmd === "ASK_USER") {
-                return `🤔 AI Membutuhkan Klarifikasi:\n${actionArr.question}`;
+                const webUiChatId = "WEB_UI_USER";
+                const qMsg = `🤔 AI Membutuhkan Klarifikasi:\n${actionArr.question}`;
+                _savePendingState(webUiChatId, fullContext, qMsg);
+                return qMsg;
              }
              actionArr = [actionArr];
            }
@@ -193,7 +209,10 @@ function processSmartChat(payload) {
           let parsedData = AIAgent._extractJson(aiRaw);
           
           if (parsedData && !Array.isArray(parsedData) && parsedData.cmd === "ASK_USER") {
-             return `🤔 AI Membutuhkan Klarifikasi:\n${parsedData.question}`;
+             const webUiChatId = "WEB_UI_USER";
+             const qMsg = `🤔 AI Membutuhkan Klarifikasi:\n${parsedData.question}`;
+             _savePendingState(webUiChatId, fullContext, qMsg);
+             return qMsg;
           }
           
           let items = Array.isArray(parsedData) ? parsedData : [parsedData];
@@ -235,7 +254,10 @@ function processSmartChat(payload) {
     if (result.success) {
        return `✅ Sukses memproses ${result.count} data transaksi dari pesan Anda.`;
     } else if (result.isQuestion) {
-       return `🤔 AI Membutuhkan Klarifikasi:\n${result.message}`;
+       const webUiChatId = "WEB_UI_USER";
+       const qMsg = `🤔 AI Membutuhkan Klarifikasi:\n${result.message}`;
+       _savePendingState(webUiChatId, fullContext, qMsg);
+       return qMsg;
     } else {
        return `❌ Gagal memproses transaksi: ${result.message}`;
     }

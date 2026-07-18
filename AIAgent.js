@@ -103,6 +103,7 @@ const AIAgent = {
 7. "notes" should be a short summary of what happened.
 8. DILARANG KERAS MENGUBAH FORMAT TAMPILAN SHEET (seperti row height, font, warna). HANYA GUNAKAN COMMAND UNTUK MENGUBAH DATA INVENTARIS/TRANSAKSI.
 9. Jika permintaan sangat membingungkan atau ambigu, keluarkan: { "cmd": "ASK_USER", "question": "Tuliskan pertanyaan spesifik Anda dalam bahasa Indonesia di sini" }
+10. KONTEKS PERCAKAPAN: Teks input mungkin berisi percakapan gabungan (contoh: teks asli + pertanyaan AI + jawaban singkat pengguna). Pahami seluruh riwayat tersebut untuk mengekstrak data utuh. Jika pengguna menjawab "Goreng", terapkan pada barang "Indomie Goreng" dari laporan awal.
 
 **Inventory Context:**
 ${inventoryContext}
