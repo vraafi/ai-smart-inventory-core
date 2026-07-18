@@ -740,7 +740,7 @@ CRITICAL LOCALIZATION RULE: Detect the language of the user's input. You MUST pr
            break;
         } else {
            debugLog("❌ Auditor Feedback (Attempt " + attempt + "): " + verifyResult);
-           currentPrompt = prompt + "\n\n[PERINGATAN DARI AUDITOR QA (Percobaan " + attempt + ")]:\n" + verifyResult + "\n\nTolong evaluasi kesalahan Anda dan perbaiki JSON Anda berdasarkan feedback di atas!";
+           currentPrompt = currentPrompt + "\n\n[PERINGATAN DARI AUDITOR QA (Percobaan " + attempt + ")]:\n" + verifyResult + "\n\nTolong evaluasi kesalahan Anda dan perbaiki JSON Anda berdasarkan feedback di atas!";
            attempt++;
         }
       } else {
@@ -752,7 +752,7 @@ CRITICAL LOCALIZATION RULE: Detect the language of the user's input. You MUST pr
            throw err;
        }
        debugLog("❌ Parsing Error (Attempt " + attempt + "): " + err.message);
-       currentPrompt = prompt + "\n\n[ERROR FORMATTING (Percobaan " + attempt + ")]:\n" + err.message + "\n\nPastikan format balasan HANYA berisi struktur JSON yang valid.";
+       currentPrompt = currentPrompt + "\n\n[ERROR FORMATTING (Percobaan " + attempt + ")]:\n" + err.message + "\n\nPastikan format balasan HANYA berisi struktur JSON yang valid.";
        attempt++;
     }
   }
