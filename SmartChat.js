@@ -36,8 +36,8 @@ function processSmartChat(payload) {
     const lowerText = text.toLowerCase();
     
     if (lowerText.startsWith("/wipe")) {
-       const wipeCmd = text.replace(/^\/wipe/i, "").trim();
-       if (wipeCmd !== "") {
+       const wipeCmd = text.replace(/^\/wipe/i, "").trim().toLowerCase();
+       if (wipeCmd !== "" && wipeCmd !== "confirm") {
            // AI-powered wipe: use a dedicated wipe prompt with destructive commands
            const wipePrompt = `**Task:** Translate the user's Google Sheets DATA DELETION request into a JSON array of wipe commands.
 **CRITICAL CONSTRAINTS - VIOLATING THESE WILL CAUSE A SYSTEM CRASH:**
