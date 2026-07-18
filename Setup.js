@@ -682,19 +682,38 @@ function _recordTransaction(item, type, qty, notes, source, overrideNewStock) {
   const stockBefore = item.stock;
   let stockAfter;
 
+  const cIn = invCmap.stockIn !== -1 ? String.fromCharCode(65 + invCmap.stockIn) : null;
+  const cOut = invCmap.stockOut !== -1 ? String.fromCharCode(65 + invCmap.stockOut) : null;
+  const cInit = invCmap.initialStock !== -1 ? String.fromCharCode(65 + invCmap.initialStock) : null;
+
   if (type.includes("IN")) {
     stockAfter = stockBefore + qty;
+    if (invCmap.stockIn !== -1) {
+       invSh.getRange(item.row, invCmap.stockIn + 1).setValue(item.totalIn + qty);
+    }
   } else if (type.includes("OUT")) {
     stockAfter = stockBefore - qty;
+    if (invCmap.stockOut !== -1) {
+       invSh.getRange(item.row, invCmap.stockOut + 1).setValue(item.totalOut + qty);
+    }
   } else { // ADJUSTMENT
     stockAfter = (overrideNewStock !== undefined) ? overrideNewStock : stockBefore;
+    if (cInit && cIn && cOut) {
+       const diff = stockAfter - (item.initialStock + item.totalIn - item.totalOut);
+       if (diff !== 0) {
+           invSh.getRange(item.row, invCmap.initialStock + 1).setValue(item.initialStock + diff);
+       }
+    }
   }
 
-  // DIRECTLY update the Stok column in Inventory sheet
   if (invCmap.stock !== -1) {
-    invSh.getRange(item.row, invCmap.stock + 1).setValue(stockAfter);
-  } else {
-    debugLog("WARNING: 'Stok' column not found in Inventory sheet! Cannot update stock.");
+    if (invCmap.stockIn === -1 || invCmap.stockOut === -1 || !cInit) {
+        // Fallback: strictly overwrite current stock if IN/OUT/INIT columns do not exist
+        invSh.getRange(item.row, invCmap.stock + 1).setValue(stockAfter);
+    } else {
+        // Guarantee that the formula exists
+        invSh.getRange(item.row, invCmap.stock + 1).setFormula(`=IF(B${item.row}="","",${cInit}${item.row}+${cIn}${item.row}-${cOut}${item.row})`);
+    }
   }
 
   const op = "Operator";
@@ -874,7 +893,10 @@ function _findItem(code, name) {
       code: data[i][cmap.code],
       name: data[i][cmap.name],
       branch: (cmap.branch < data[i].length && cmap.branch !== -1) ? data[i][cmap.branch] : "",
-      stock: (cmap.stock !== -1) ? (data[i][cmap.stock] || 0) : 0,
+      stock: (cmap.stock !== -1) ? (parseFloat(data[i][cmap.stock]) || 0) : 0,
+      totalIn: (cmap.stockIn !== -1) ? (parseFloat(data[i][cmap.stockIn]) || 0) : 0,
+      totalOut: (cmap.stockOut !== -1) ? (parseFloat(data[i][cmap.stockOut]) || 0) : 0,
+      initialStock: (cmap.initialStock !== -1) ? (parseFloat(data[i][cmap.initialStock]) || 0) : 0,
       minStock: (cmap.minStock < data[i].length && cmap.minStock !== -1) ? (data[i][cmap.minStock] || 0) : 0,
       unit: (cmap.unit < data[i].length && cmap.unit !== -1) ? (data[i][cmap.unit] || "") : "",
       buyPrice: (cmap.buyPrice !== -1) ? parseFloat(data[i][cmap.buyPrice]) || 0 : undefined,
