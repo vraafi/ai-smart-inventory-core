@@ -658,17 +658,13 @@ Example output for UNSTRUCTURED:
   // Anti Prompt-Injection: Escape HTML/XML chars to prevent breaking out of tags
   const sanitizedText = rawText.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
-  const prompt = `**Task:** You are a strict inventory data parser. Extract transactions from the employee report below.
+  const systemPrompt = `**Task:** You are a strict inventory data parser. Extract transactions from the employee report.
 
 **CRITICAL CONSTRAINTS - VIOLATING THESE WILL CAUSE A SYSTEM CRASH:**
 - DO NOT print "User request:", "Interpretation:", "Action:", "Sheet:", or "Range:".
 - DO NOT use bullet points or asterisks (*).
 - DO NOT think step-by-step.
 - YOU MUST ENCLOSE YOUR ENTIRE JSON OUTPUT WITHIN A MARKDOWN BLOCK (\`\`\`json ... \`\`\`).
-
-<employee_report>
-${sanitizedText}
-</employee_report>
 
 AVAILABLE ITEMS (SKU | Name | Category | CurrentStock):
 ${itemContext}
@@ -678,11 +674,6 @@ ${itemContext}
 2. FUZZY / PARTIAL MATCHING: If the user omits minor details but the main attributes match, use that item.
 3. IDENTICAL DUPLICATES: If multiple items perfectly match, pick the FIRST matching item_code.
 4. Transaction types: "IN", "OUT", "ADJUSTMENT", "CHECK", "UNKNOWN".
-5. quantity must always be a positive number.
-6. Each separate item in the report = separate transaction object.
-7. If AMBIGUOUS, set item_code="AMBIGUOUS" and write a short question in 'notes'.
-8. ANTI-FRAUD VALIDATION: If reported price differs from system price without a valid reason, set "type": "UNKNOWN". If valid reason, prefix notes with "[PRICE OVERRIDE: reason]".
-
 CRITICAL LOCALIZATION RULE: Detect the language of the user's input. You MUST provide the translations for the system messages below in the exact same language.
 
 **Output Format Example:**
@@ -703,6 +694,7 @@ CRITICAL LOCALIZATION RULE: Detect the language of the user's input. You MUST pr
   "sys_err_qty": "Translated: ❌ Could not detect a valid quantity for",
   "sys_confirm": "Translated: 🤔 AI is {conf}% confident about {name}..."
 }`;
+  const currentPrompt = `Employee report:\n${sanitizedText}`;
 
   let parsedList;
   let rootParsed = {};
@@ -711,13 +703,12 @@ CRITICAL LOCALIZATION RULE: Detect the language of the user's input. You MUST pr
   // --- METODE BERFIKIR 2X (SMART LOOP QA) ---
   let maxAttempts = 3;
   let attempt = 1;
-  let currentPrompt = prompt;
   let success = false;
   
   while (attempt <= maxAttempts && !success) {
     try {
       debugLog("Sending to AI (Attempt " + attempt + ")...");
-      aiRaw = callAI(currentPrompt, null);
+      aiRaw = callAI(currentPrompt, systemPrompt);
       debugLog("[ROUTING] AI Raw Output (Attempt " + attempt + "): " + aiRaw);
       
       let parsed = AIAgent._extractJson(aiRaw);
