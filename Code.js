@@ -730,7 +730,8 @@ function showOnboardingDialog() {
 }
 
 function processOnboarding(formObj) {
-  if (!formObj.new_item_name && !formObj.item_name) throw new Error("Nama Barang wajib diisi");
+  const finalName = String(formObj.new_item_name || formObj.item_name || "").trim();
+  if (!finalName) throw new Error("Nama Barang wajib diisi dan tidak boleh kosong");
   
   console.log("[ONBOARDING DEBUG] processOnboarding called with: " + JSON.stringify(formObj));
   

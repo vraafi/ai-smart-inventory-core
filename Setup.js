@@ -836,7 +836,11 @@ function _createNewItemRow(parsed) {
   let itemCount = firstEmptyIndex - 1; // subtract header row
   const sku = parsed.item_code || ("SKU-" + ("000" + (itemCount + 1)).slice(-4));
   
-  const itemName = parsed.new_item_name || parsed.item_name || "New Item";
+  const itemName = (parsed.new_item_name || parsed.item_name || "").trim();
+  if (!itemName || itemName === "New Item") {
+    console.log("[ONBOARDING] Item name is empty! Aborting to prevent empty rows.");
+    return null;
+  }
   console.log("[ONBOARDING] Writing SKU=" + sku + " Name=" + itemName + " to row " + targetRow);
   
   if (targetRow > sh.getMaxRows()) {
