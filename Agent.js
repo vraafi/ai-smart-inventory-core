@@ -882,6 +882,36 @@ function _executeAgentTransaction(chatId, parsed, senderName, source, rawText) {
 
   const stockAfter = _recordTransaction(item, txType, qty, notes, source, overrideNewStock);
 
+  // ─── POST-TRANSACTION QA CHECK (SELF-HEALING) ───
+  let qaNote = "";
+  try {
+    SpreadsheetApp.flush();
+    const invSh = _getSheet(SHEETS.INVENTORY);
+    const rowVals = invSh.getRange(item.row, 1, 1, invSh.getLastColumn()).getDisplayValues()[0];
+    const hasError = rowVals.some(v => typeof v === "string" && (v.includes("#ERROR!") || v.includes("#REF!") || v.includes("#VALUE!") || v.includes("#NAME?")));
+    
+    if (hasError) {
+      // Auto-repair the row
+      const headers = invSh.getRange(1, 1, 1, invSh.getLastColumn()).getValues()[0];
+      const c = _getInventoryColMap(headers);
+      const cIn = c.stockIn !== -1 ? _colLetter(c.stockIn) : null;
+      const cOut = c.stockOut !== -1 ? _colLetter(c.stockOut) : null;
+      const cInit = c.initialStock !== -1 ? _colLetter(c.initialStock) : null;
+      const cMin = c.minStock !== -1 ? _colLetter(c.minStock) : null;
+      
+      if (c.stock !== -1 && cIn && cOut && cInit) {
+        invSh.getRange(item.row, c.stock + 1).setFormula(`=${cInit}${item.row}+${cIn}${item.row}-${cOut}${item.row}`);
+      }
+      if (c.status !== -1 && cMin && c.stock !== -1) {
+        const cStock = _colLetter(c.stock);
+        invSh.getRange(item.row, c.status + 1).setFormula(`=IF(B${item.row}="","",IF(${cStock}${item.row}=0,"🔴 OUT OF STOCK",IF(${cStock}${item.row}<=${cMin}${item.row}/2,"🟠 CRITICAL",IF(${cStock}${item.row}<=${cMin}${item.row},"🟡 LOW STOCK","🟢 IN STOCK"))))`);
+      }
+      qaNote = "\n\n⚠️ *QA Audit:* AI mendeteksi error formula pada baris Google Sheets dan telah memperbaikinya secara otomatis.";
+    }
+  } catch (qaErr) {
+    debugLog("QA Check error: " + qaErr.message);
+  }
+
   // Calculate new status
   const minStk = item.minStock;
   let newStatus;
@@ -904,7 +934,7 @@ function _executeAgentTransaction(chatId, parsed, senderName, source, rawText) {
     newStatus:    newStatus,
     operator:     senderName,
     source:       source,
-    notes:        parsed.notes || "",
+    notes:        (parsed.notes || "") + qaNote,
     rawReport:    rawText,
     aiConfidence: parsed.confidence,
     aiReasoning:  parsed.ai_reasoning,
