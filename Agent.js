@@ -595,7 +595,7 @@ Example output for UNSTRUCTURED:
                      const uniqueId = Utilities.getUuid ? Utilities.getUuid().substring(0,8).toUpperCase() : `ID-${Date.now()}-${r}`;
                      
                      newRows.push([
-                         uniqueId, itemCode, itemName, category, branch, initialStock, 0, 0, "", 0, unit, buyPrice, sellPrice, status, "", new Date()
+                         branch, itemCode, itemName, category, initialStock, 0, 0, 0, 0, unit, buyPrice, sellPrice, status, new Date(), uniqueId
                      ]);
                  } else {
                      // TRANSACTION schema: ["#", "Date & Time", "Type", "Item Code", "Item Name", "Branch", "Qty", "Stock Before", "Stock After", "Buy Price", "Sell Price", "Profit", "Notes", "Operator", "Source"]
@@ -624,9 +624,9 @@ Example output for UNSTRUCTURED:
                 if (sheetType === "INVENTORY") {
                     const formulas = [];
                     for(let nr = lastRow + 1; nr <= lastRow + newRows.length; nr++) {
-                        formulas.push([`=F${nr}+G${nr}-H${nr}`]);
+                        formulas.push([`=E${nr}+F${nr}-G${nr}`]);
                     }
-                    targetSheet.getRange(lastRow + 1, 9, newRows.length, 1).setFormulas(formulas);
+                    targetSheet.getRange(lastRow + 1, 8, newRows.length, 1).setFormulas(formulas);
                 } else if (sheetType === "TRANSACTION") {
                     const formulas = [];
                     for(let nr = lastRow + 1; nr <= lastRow + newRows.length; nr++) {
