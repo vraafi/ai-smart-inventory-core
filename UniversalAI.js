@@ -346,7 +346,7 @@ function _callOpenAICompatible(config, prompt, systemPrompt) {
     model: model,
     messages: messages,
     temperature: 0.1,
-    max_tokens: 1024,
+    max_tokens: 4096,
   };
 
   // Force JSON response where supported (OpenAI, Groq, Together, 9router, etc.)
@@ -385,7 +385,7 @@ function _callGeminiProvider(config, prompt, systemPrompt) {
     contents: [{ parts: [{ text: prompt }] }],
     generationConfig: { 
       temperature: 0.1, 
-      maxOutputTokens: 1024,
+      maxOutputTokens: 4096,
       responseMimeType: "application/json"
     },
     safetySettings: [
@@ -426,7 +426,7 @@ function _callAnthropicProvider(config, prompt, systemPrompt) {
 
   const body = {
     model: model,
-    max_tokens: 1024,
+    max_tokens: 4096,
     messages: [{ role: "user", content: prompt }],
   };
   if (systemPrompt) body.system = systemPrompt;
@@ -726,7 +726,7 @@ function _callGemini(prompt, apiKey) {
       contents: [{ parts: [{ text: prompt }] }],
       generationConfig: { 
         temperature: 0.1, 
-        maxOutputTokens: 1024,
+        maxOutputTokens: 4096,
         responseMimeType: "application/json"
       },
     }),
