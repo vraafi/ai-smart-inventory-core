@@ -1431,6 +1431,40 @@ function _escapeHtml(text) {
 //  AI SMART REPAIR — Intelligent Data Cleanup & Sync
 // ═══════════════════════════════════════════════════════════════
 
+function repairInventoryFormulas() {
+  const sh = _getSheet(SHEETS.INVENTORY);
+  if (!sh) { SpreadsheetApp.getUi().alert("Error: Inventory sheet not found!"); return; }
+  const data = sh.getDataRange().getValues();
+  if (data.length < 2) return;
+  const cmap = _getInventoryColMap(data[0]);
+
+  const cIn = cmap.stockIn !== -1 ? _colLetter(cmap.stockIn) : null;
+  const cOut = cmap.stockOut !== -1 ? _colLetter(cmap.stockOut) : null;
+  const cInit = cmap.initialStock !== -1 ? _colLetter(cmap.initialStock) : null;
+  const cMin = cmap.minStock !== -1 ? _colLetter(cmap.minStock) : null;
+
+  if (cmap.stock === -1 || !cIn || !cOut || !cInit) {
+    SpreadsheetApp.getUi().alert("Error: Missing required columns (Stok, Total In, Total Out, Initial Stock).");
+    return;
+  }
+
+  let count = 0;
+  for (let i = 1; i < data.length; i++) {
+    const row = i + 1;
+    if (data[i][cmap.code]) {
+      // Fix Current Stock
+      sh.getRange(row, cmap.stock + 1).setFormula(`=${cInit}${row}+${cIn}${row}-${cOut}${row}`);
+      // Fix Status if minStock and status exist
+      if (cmap.status !== -1 && cMin) {
+        const cStock = _colLetter(cmap.stock);
+        sh.getRange(row, cmap.status + 1).setFormula(`=IF(B${row}="","",IF(${cStock}${row}=0,"🔴 OUT OF STOCK",IF(${cStock}${row}<=${cMin}${row}/2,"🟠 CRITICAL",IF(${cStock}${row}<=${cMin}${row},"🟡 LOW STOCK","🟢 IN STOCK"))))`);
+      }
+      count++;
+    }
+  }
+  SpreadsheetApp.getUi().alert("✅ Selesai!", `Berhasil memperbaiki formula stok dan status untuk ${count} barang.`, SpreadsheetApp.getUi().ButtonSet.OK);
+}
+
 function showRepairDialog() {
   const html = HtmlService.createHtmlOutput(`
     <!DOCTYPE html>

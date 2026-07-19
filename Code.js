@@ -43,6 +43,7 @@ function onOpen() {
     .addItem('🔄 Refresh Dashboard',             'refreshDashboardClick')
     .addItem('📊 Recalculate All Status',        'recalcAllStatus')
     .addItem('🛠️ AI Smart Repair',               'showRepairDialog')
+    .addItem('🚑 Perbaiki Formula Stok',         'repairInventoryFormulas')
     .addSeparator()
     // ── Configuration ──
     .addItem('🤖 Konfigurasi AI (Universal)',    'openAiConfigUI')
