@@ -189,18 +189,29 @@ const InventoryCore = {
     
     if (lastRow < startRow) throw new Error("Inventory is empty.");
     
-    const dataRange = invSheet.getRange(startRow, 1, lastRow - startRow + 1, 9).getValues();
+    const headers = invSheet.getRange(headerRow, 1, 1, invSheet.getLastColumn()).getValues()[0];
+    let cmap;
+    try {
+      cmap = typeof _getInventoryColMap === 'function' ? _getInventoryColMap(headers) : { branch: 0, code: 1, initialStock: 4, stockIn: 5, stockOut: 6, stock: 7 };
+    } catch(e) {
+      cmap = { branch: 0, code: 1, initialStock: 4, stockIn: 5, stockOut: 6, stock: 7 };
+    }
+
+    const dataRange = invSheet.getRange(startRow, 1, lastRow - startRow + 1, invSheet.getLastColumn()).getValues();
     let targetRowIndex = -1;
     let currentIn = 0;
     let currentOut = 0;
     let currentStock = 0;
     
     for (let i = 0; i < dataRange.length; i++) {
-      if (String(dataRange[i][0]).toLowerCase() === branch.toLowerCase() && String(dataRange[i][1]) === String(itemId)) {
+      let bVal = cmap.branch !== -1 ? String(dataRange[i][cmap.branch]) : "";
+      let cVal = cmap.code !== -1 ? String(dataRange[i][cmap.code]) : "";
+      
+      if (bVal.toLowerCase() === branch.toLowerCase() && cVal === String(itemId)) {
         targetRowIndex = startRow + i;
-        currentIn = Number(dataRange[i][5]) || 0; // Col F
-        currentOut = Number(dataRange[i][6]) || 0; // Col G
-        currentStock = Number(dataRange[i][7]) || 0; // Col H
+        currentIn = cmap.stockIn !== -1 ? (Number(dataRange[i][cmap.stockIn]) || 0) : 0;
+        currentOut = cmap.stockOut !== -1 ? (Number(dataRange[i][cmap.stockOut]) || 0) : 0;
+        currentStock = cmap.stock !== -1 ? (Number(dataRange[i][cmap.stock]) || 0) : 0;
         break;
       }
     }
@@ -215,15 +226,19 @@ const InventoryCore = {
     }
     
     // 4. Increment the correct column
-    if (type === 'IN') {
-      invSheet.getRange(targetRowIndex, 6).setValue(currentIn + qty); // Col F is 6
-    } else if (type === 'OUT') {
-      invSheet.getRange(targetRowIndex, 7).setValue(currentOut + qty); // Col G is 7
+    if (type === 'IN' && cmap.stockIn !== -1) {
+      invSheet.getRange(targetRowIndex, cmap.stockIn + 1).setValue(currentIn + qty);
+    } else if (type === 'OUT' && cmap.stockOut !== -1) {
+      invSheet.getRange(targetRowIndex, cmap.stockOut + 1).setValue(currentOut + qty);
     }
     
     // 5. Update Status
-    // Make sure formula is still there, then update status
-    invSheet.getRange(`H${targetRowIndex}`).setFormula(`=E${targetRowIndex}+F${targetRowIndex}-G${targetRowIndex}`);
+    if (cmap.stock !== -1) {
+        const letterInitial = cmap.initialStock !== -1 ? String.fromCharCode(65 + cmap.initialStock) : "E";
+        const letterIn = cmap.stockIn !== -1 ? String.fromCharCode(65 + cmap.stockIn) : "F";
+        const letterOut = cmap.stockOut !== -1 ? String.fromCharCode(65 + cmap.stockOut) : "G";
+        invSheet.getRange(targetRowIndex, cmap.stock + 1).setFormula(`=${letterInitial}${targetRowIndex}+${letterIn}${targetRowIndex}-${letterOut}${targetRowIndex}`);
+    }
     this.updateStatusColumn(invSheet, targetRowIndex);
   }
 };

@@ -759,9 +759,23 @@ function processOnboarding(formObj) {
        // Use defensive _safeSetValue globally defined in Setup.js
        
        if (cmap.initialStock !== -1) _safeSetValue(sh, rowObj.row, cmap.initialStock, parsed.quantity);
-       if (cmap.stock !== -1) _safeSetValue(sh, rowObj.row, cmap.stock, parsed.quantity);
-       if (cmap.stockIn !== -1) _safeSetValue(sh, rowObj.row, cmap.stockIn, parsed.quantity);
+       if (cmap.stockIn !== -1) _safeSetValue(sh, rowObj.row, cmap.stockIn, 0);
        if (cmap.stockOut !== -1) _safeSetValue(sh, rowObj.row, cmap.stockOut, 0);
+       if (cmap.stock !== -1) {
+           // Restore the proper formula: Initial Stock + Total In - Total Out
+           // For user's format (Initial F, In G, Out H) it works dynamically via R1C1 or A1
+           const cStock = sh.getRange(rowObj.row, cmap.stock + 1);
+           const letterInitial = cmap.initialStock !== -1 ? String.fromCharCode(65 + cmap.initialStock) : "";
+           const letterIn = cmap.stockIn !== -1 ? String.fromCharCode(65 + cmap.stockIn) : "";
+           const letterOut = cmap.stockOut !== -1 ? String.fromCharCode(65 + cmap.stockOut) : "";
+           
+           if (letterInitial && letterIn && letterOut) {
+               cStock.setFormula(`=${letterInitial}${rowObj.row}+${letterIn}${rowObj.row}-${letterOut}${rowObj.row}`);
+           } else {
+               // Fallback formula if column mapping is weird (just basic offset)
+               cStock.setFormula(`=R[0]C[-3]+R[0]C[-2]-R[0]C[-1]`);
+           }
+       }
        
        _safeSetValue(sh, rowObj.row, cmap.minStock, parsed.min_stock);
        _safeSetValue(sh, rowObj.row, cmap.unit, parsed.unit);
