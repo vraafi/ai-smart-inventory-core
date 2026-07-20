@@ -22,7 +22,7 @@ function runSimulationDemo() {
     };
     Logger.log(`[Simulasi] Spreadsheet dialihkan ke Klien Asli (ID: ${TARGET_SHEET_ID})`);
   } catch (e) {
-    Logger.log("[Simulasi] Peringatan: Gagal memodifikasi SpreadsheetApp (Native protection). Menggunakan fallback...");
+    Logger.log("[Simulasi] Peringatan: Failed memodifikasi SpreadsheetApp (Native protection). Menggunakan fallback...");
   }
   
   // 3. Menjalankan Tes

@@ -62,8 +62,8 @@
       <p style="font-size: 0.85rem; color: #555;">Masukkan kredensial dari dashboard Meta for Developers.</p>
       
       <div class="form-group">
-        <label for="accessToken">Access Token</label>
-        <input type="password" id="accessToken" placeholder="EAABxxxxxxx...">
+        <label for="accesStocken">Access Token</label>
+        <input type="password" id="accesStocken" placeholder="EAABxxxxxxx...">
       </div>
 
       <div class="form-group">
@@ -77,7 +77,7 @@
         <div class="help-text">Gunakan token ini saat mengatur Webhook di Meta.</div>
       </div>
 
-      <button onclick="saveConfig()" id="saveBtn">Simpan Konfigurasi</button>
+      <button onclick="saveConfig()" id="saveBtn">Save Konfigurasi</button>
       <div id="status" style="margin-top: 10px; font-size: 0.9rem; text-align: center;"></div>
     </div>
 
@@ -86,7 +86,7 @@
       google.script.run
         .withSuccessHandler(function(cfg) {
           if (!cfg || !cfg.success) return;
-          if (cfg.accessToken) document.getElementById('accessToken').value = cfg.accessToken;
+          if (cfg.accesStocken) document.getElementById('accesStocken').value = cfg.accesStocken;
           if (cfg.phoneId) document.getElementById('phoneId').value = cfg.phoneId;
           if (cfg.verifyToken) document.getElementById('verifyToken').value = cfg.verifyToken;
         })
@@ -97,35 +97,35 @@
         const btn = document.getElementById('saveBtn');
         const status = document.getElementById('status');
         
-        const accessToken = document.getElementById('accessToken').value;
+        const accesStocken = document.getElementById('accesStocken').value;
         const phoneId = document.getElementById('phoneId').value;
         const verifyToken = document.getElementById('verifyToken').value;
 
         btn.disabled = true;
-        btn.innerText = "Menyimpan...";
+        btn.innerText = "Saving...";
         status.innerText = "";
         status.style.color = "black";
 
         google.script.run
           .withSuccessHandler(function(response) {
             btn.disabled = false;
-            btn.innerText = "Simpan Konfigurasi";
+            btn.innerText = "Save Konfigurasi";
             if (response.success) {
               status.style.color = "green";
-              status.innerText = "✅ Konfigurasi berhasil disimpan!";
+              status.innerText = "✅ Konfigurasi berhasil diSave!";
               setTimeout(() => google.script.host.close(), 2000);
             } else {
               status.style.color = "red";
-              status.innerText = "❌ Gagal: " + response.message;
+              status.innerText = "❌ Failed: " + response.message;
             }
           })
           .withFailureHandler(function(err) {
             btn.disabled = false;
-            btn.innerText = "Simpan Konfigurasi";
+            btn.innerText = "Save Konfigurasi";
             status.style.color = "red";
             status.innerText = "❌ System Error: " + err.message;
           })
-          .saveWaConfig(accessToken, phoneId, verifyToken);
+          .saveWaConfig(accesStocken, phoneId, verifyToken);
       }
     </script>
   </body>

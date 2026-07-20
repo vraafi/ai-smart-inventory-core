@@ -208,7 +208,7 @@ function _processTelegramMessage(chatId, text, senderName, document) {
         }
       }
     } catch(e) {
-      _sendTelegram(chatId, "❌ Gagal mengekstrak dokumen: " + e.message);
+      _sendTelegram(chatId, "❌ Failed mengekstrak dokumen: " + e.message);
       return;
     }
   }
@@ -450,7 +450,7 @@ function _processWithAI(chatId, rawText, senderName, source, bulkDataArray = nul
     const storedPin = _getScriptProps().getProperty("ADMIN_WIPE_PIN") || "1234";
     
     if (!pinMatch) {
-      _sendAgentMsg(source, chatId, "🔐 VERIFIKASI KEAMANAN DIPERLUKAN\n\nPerintah /wipe dan /format membutuhkan PIN Admin.\n\nFormat: /wipe PIN:1234 [perintah Anda]\nContoh: /wipe PIN:1234 hapus semua data transaksi\n\nHubungi Admin untuk mendapatkan PIN.");
+      _sendAgentMsg(source, chatId, "🔐 VERIFIKASI KEAMANAN DIPERLUKAN\n\nPerintah /wipe dan /format membutuhkan PIN Admin.\n\nFormat: /wipe PIN:1234 [perintah Anda]\nExample: /wipe PIN:1234 hapus semua data transaksi\n\nHubungi Admin untuk mendapatkan PIN.");
       return;
     }
     
@@ -477,7 +477,7 @@ function _processWithAI(chatId, rawText, senderName, source, bulkDataArray = nul
           if (trxSh) { trxSh.getRange("A2:N" + trxSh.getMaxRows()).clearContent(); wiped++; }
           _sendAgentMsg(source, chatId, "✅ WIPE BERHASIL! " + wiped + " tabel telah dibersihkan (rumus tetap aman).");
         } catch(e) {
-          _sendAgentMsg(source, chatId, "❌ Gagal melakukan Wipe: " + e.message);
+          _sendAgentMsg(source, chatId, "❌ Failed melakukan Wipe: " + e.message);
         }
       }
       return;
@@ -487,7 +487,7 @@ function _processWithAI(chatId, rawText, senderName, source, bulkDataArray = nul
     try {
       const actionArr = AIAgent.parseFormattingAI(commandText);
       if (!actionArr || (Array.isArray(actionArr) && actionArr.length === 0)) {
-        _sendAgentMsg(source, chatId, "❌ AI gagal menerjemahkan permintaan Anda menjadi tindakan valid.");
+        _sendAgentMsg(source, chatId, "❌ AI Failed menerjemahkan permintaan Anda menjadi tindakan valid.");
         return;
       }
       const actions = Array.isArray(actionArr) ? actionArr : [actionArr];
@@ -537,10 +537,10 @@ Example output for UNSTRUCTURED:
   "mapping": {}
 }
 `;
-         _sendAgentMsg(source, chatId, "🧠 Menghubungi AI untuk mengklasifikasi dan memetakan kolom otomatis...");
+         _sendAgentMsg(source, chatId, "🧠 Contacting AI untuk mengklasifikasi dan memetakan kolom otomatis...");
          const aiRaw = callAI(mappingPrompt, "You are a JSON generator.");
          const jsonMatch = aiRaw.match(/\{[\s\S]*\}/);
-         if (!jsonMatch) throw new Error("AI gagal memetakan kolom.");
+         if (!jsonMatch) throw new Error("AI Failed memetakan kolom.");
          
          const parsed = JSON.parse(jsonMatch[0]);
          const sheetType = parsed.sheet_type || "INVENTORY";
@@ -555,7 +555,7 @@ Example output for UNSTRUCTURED:
              // Do NOT return here. Fall through to the main AI processing block!
          } else {
              if (sheetType === "INVENTORY" && !mapping.item_name) {
-                 throw new Error("AI mengklasifikasi ini sebagai Inventory, tapi tidak bisa menemukan kolom Nama Barang.");
+                 throw new Error("AI mengklasifikasi ini sebagai Inventory, tapi tidak bisa menemukan kolom Item Name.");
              }
              
              const sourceHeaders = rawData[0]; // Assume first row is header for tabular data
@@ -572,7 +572,7 @@ Example output for UNSTRUCTURED:
              const ss = _getSpreadsheet();
              let targetSheetName = sheetType === "INVENTORY" ? "Inventory" : "Transaction";
              let targetSheet = ss.getSheetByName(targetSheetName);
-             if (!targetSheet) throw new Error(`Tab ${targetSheetName} tidak ditemukan.`);
+             if (!targetSheet) throw new Error(`Tab ${targetSheetName} Not found.`);
              
              const newRows = [];
              for (let r = 1; r < rawData.length; r++) {
@@ -635,7 +635,7 @@ Example output for UNSTRUCTURED:
                     targetSheet.getRange(lastRow + 1, 1, newRows.length, 1).setFormulas(formulas);
                 }
                 
-                _sendAgentMsg(source, chatId, `✅ Sukses! ${newRows.length} baris berhasil dimigrasikan ke tab ${targetSheetName}.`);
+                _sendAgentMsg(source, chatId, `✅ Success! ${newRows.length} baris berhasil dimigrasikan ke tab ${targetSheetName}.`);
              } else {
                 _sendAgentMsg(source, chatId, "⚠️ Tidak ada baris data yang valid untuk diimpor.");
              }
@@ -727,7 +727,7 @@ CRITICAL LOCALIZATION RULE: Detect the language of the user's input. You MUST pr
         parsedList = Array.isArray(parsed) ? parsed : [parsed];
         
         // SELF VERIFICATION
-        let verifySys = "Anda adalah auditor QA internal. Verifikasi apakah JSON ini sudah memenuhi instruksi pengguna dengan tepat. Jawab HANYA dengan kata 'SUDAH' jika benar. Jika ada kesalahan logika, salah qty, salah nama barang, atau salah klasifikasi IN/OUT, sebutkan detail kesalahannya agar AI utama bisa memperbaiki.";
+        let verifySys = "Anda adalah auditor QA internal. Verifikasi apakah JSON ini sudah memenuhi instruksi pengguna dengan tepat. Jawab HANYA dengan kata 'SUDAH' jika benar. Jika ada kesalahan logika, salah qty, salah Item Name, atau salah klasifikasi IN/OUT, sebutkan detail kesalahannya agar AI utama bisa memperbaiki.";
         let verifyPrompt = "\nInstruksi Pengguna: \"" + rawText + "\"\n\nJSON yang dihasilkan:\n" + JSON.stringify(parsedList) + "\n\nApakah JSON ini sudah tepat sasaran?";
         let verifyResult = callAI(verifyPrompt, verifySys);
         
@@ -760,7 +760,7 @@ CRITICAL LOCALIZATION RULE: Detect the language of the user's input. You MUST pr
   
   try {
      if (!success && !parsedList) {
-         throw lastError || new Error("Gagal setelah " + maxAttempts + " percobaan.");
+         throw lastError || new Error("Failed setelah " + maxAttempts + " percobaan.");
      }
   } catch (err) {
     Logger.log("AI error: " + err);
@@ -861,7 +861,7 @@ function _executeAgentTransaction(chatId, parsed, senderName, source, rawText) {
     debugLog("_findItem result: " + (item ? "FOUND row=" + item.row + " name=" + item.name + " stock=" + item.stock : "NULL"));
 
   if (!item) {
-    if (chatId) _sendAgentMsg(source, chatId, `❌ **Transaction Denied:** Item "${parsed.item_name || 'Tidak diketahui'}" is not registered in the database.\\n\\nPlease ask the Admin to add it via the Google Sheets menu (Smart Inventory ➔ Registrasi Barang Baru).`);
+    if (chatId) _sendAgentMsg(source, chatId, `❌ **Transaction Denied:** Item "${parsed.item_name || 'Tidak diketahui'}" is not registered in the database.\\n\\nPlease ask the Admin to add it via the Google Sheets menu (Smart Inventory ➔ Registrasi New item).`);
     return;
   }
 
@@ -1234,7 +1234,7 @@ function _sendWhatsApp(phone, text) {
       debugLog("EMAIL FAILED TO SEND: " + e.message);
       const adminId = _getScriptProps().getProperty("ADMIN_CHAT_ID");
       if (adminId) {
-        _sendTelegram(adminId, `⚠️ <b>SYSTEM ALERT</b> ⚠️\n\nGagal mengirim email balasan ke ${recipient} karena limit kuota Gmail.\n\n<b>Status Sistem:</b> Perintah pengguna telah diproses oleh AI, namun balasan tertahan.`);
+        _sendTelegram(adminId, `⚠️ <b>SYSTEM ALERT</b> ⚠️\n\nFailed mengirim email balasan ke ${recipient} karena limit kuota Gmail.\n\n<b>Status Sistem:</b> Perintah pengguna telah diproses oleh AI, namun balasan tertahan.`);
       }
     }
   }

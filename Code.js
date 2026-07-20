@@ -35,7 +35,7 @@ function onOpen() {
     // ── Email & Reports ──
     .addItem('📧 Process Inbox Emails (AI)',     'runInboxWatcher')
     .addItem('📨 Manual Poll Emails',            'pollEmails')
-    .addItem('🤖 Aktifkan Email Otomatis',       'installEmailTrigger')
+    .addItem('🤖 Enable Auto Email',             'installEmailTrigger')
     .addItem('🧪 Test Email Integration',         'testEmailIntegration')
     .addItem('📊 Generate Monthly Report (AI)',  'runMonthlyAnalysis')
     .addSeparator()
@@ -43,10 +43,10 @@ function onOpen() {
     .addItem('🔄 Refresh Dashboard',             'refreshDashboardClick')
     .addItem('📊 Recalculate All Status',        'recalcAllStatus')
     .addItem('🛠️ AI Smart Repair',               'showRepairDialog')
-    .addItem('🚑 Perbaiki Formula Stok',         'repairInventoryFormulas')
+    .addItem('🚑 Fix Stock Formulas',            'repairInventoryFormulas')
     .addSeparator()
     // ── Configuration ──
-    .addItem('🤖 Konfigurasi AI (Universal)',    'openAiConfigUI')
+    .addItem('🤖 AI Configuration (Universal)',    'openAiConfigUI')
     .addItem('📱 AI Config / Agent Settings',    'showAgentSettings')
     .addItem('⚙️ Set Telegram Credentials',      'promptTelegramCredentials')
     .addItem('⚙️ Set WhatsApp Config (Meta)',     'openWaConfigUI')
@@ -207,9 +207,9 @@ function openWaConfigUI() {
 }
 
 // Save WhatsApp Config
-function saveWaConfig(accessToken, phoneId, verifyToken) {
+function saveWaConfig(accesStocken, phoneId, verifyToken) {
   try {
-    WhatsAppService.saveCredentials(accessToken, phoneId, verifyToken);
+    WhatsAppService.saveCredentials(accesStocken, phoneId, verifyToken);
     return { success: true };
   } catch(e) {
     return { success: false, message: e.message };
@@ -220,7 +220,7 @@ function saveWaConfig(accessToken, phoneId, verifyToken) {
 function loadWaConfig() {
   try {
     var creds = WhatsAppService.getCredentials();
-    return { success: true, accessToken: creds.accessToken, phoneId: creds.phoneId, verifyToken: creds.verifyToken };
+    return { success: true, accesStocken: creds.accesStocken, phoneId: creds.phoneId, verifyToken: creds.verifyToken };
   } catch(e) {
     return { success: false };
   }
@@ -291,7 +291,7 @@ function processAutonomousInput(rawText) {
           reportMsg += `   📧 <i>Invoice sent to: ${tx.customerEmail}</i>\n`;
         }
       } catch (err) {
-        reportMsg += `${index + 1}. ❌ <b>GAGAL</b>: ${tx.quantity} unit [<code>${tx.itemId}</code>]\n`;
+        reportMsg += `${index + 1}. ❌ <b>Failed</b>: ${tx.quantity} unit [<code>${tx.itemId}</code>]\n`;
         reportMsg += `   <i>Alasan: ${err.message}</i>\n`;
       }
     });
@@ -303,7 +303,7 @@ function processAutonomousInput(rawText) {
     try {
       TelegramService.sendMessage(reportMsg);
     } catch(err) {
-      console.error("Gagal mengirim laporan Telegram: " + err.message);
+      console.error("Failed mengirim laporan Telegram: " + err.message);
     }
     
     // 3. Check low stock alerts
@@ -329,7 +329,7 @@ function sendLowStockToTelegram() {
   message += 'The following items require your attention:\n\n';
   
   lowItems.forEach(item => {
-    message += `🏢 <b>Cabang: ${item.branch}</b>\n📦 <b>${item.name}</b>\nID: <code>${item.id}</code>\nRemaining: <b>${item.stock}</b>\n\n`;
+    message += `🏢 <b>Branch: ${item.branch}</b>\n📦 <b>${item.name}</b>\nID: <code>${item.id}</code>\nRemaining: <b>${item.stock}</b>\n\n`;
   });
   
   message += '<i>Sent from Automated Inventory System</i>';
@@ -349,7 +349,7 @@ function checkAndSendTelegramSilent() {
     let message = '🚨 <b>AUTO SYSTEM ALERT</b> 🚨\n';
     message += 'Stock dropped below threshold after recent transaction:\n\n';
     lowItems.forEach(item => {
-      message += `🏢 <b>Cabang: ${item.branch}</b>\n📦 <b>${item.name}</b>\nID: <code>${item.id}</code>\nRemaining: <b>${item.stock}</b>\n\n`;
+      message += `🏢 <b>Branch: ${item.branch}</b>\n📦 <b>${item.name}</b>\nID: <code>${item.id}</code>\nRemaining: <b>${item.stock}</b>\n\n`;
     });
     try {
       TelegramService.sendMessage(message);
@@ -715,7 +715,7 @@ function installEmailTrigger() {
       
     ui.alert("🚀 Berhasil!", "Sistem Auto-Pilot Email berhasil diaktifkan.\nAI akan mengecek kotak masuk email Anda setiap 1 jam sekali secara otomatis tanpa Anda perlu menekan tombol apa pun.", ui.ButtonSet.OK);
   } catch (e) {
-    ui.alert("� � Error", "Gagal mengaktifkan trigger: " + e.message, ui.ButtonSet.OK);
+    ui.alert("� � Error", "Failed mengaktifkan trigger: " + e.message, ui.ButtonSet.OK);
   }
 }
 
@@ -725,13 +725,13 @@ function showOnboardingDialog() {
   const html = HtmlService.createHtmlOutputFromFile('OnboardingUI')
     .setWidth(800)
     .setHeight(600)
-    .setTitle('Registrasi Barang Baru (Smart Onboarding)');
-  SpreadsheetApp.getUi().showModalDialog(html, 'Registrasi Barang Baru');
+    .setTitle('Registrasi New item (Smart Onboarding)');
+  SpreadsheetApp.getUi().showModalDialog(html, 'Registrasi New item');
 }
 
 function processOnboarding(formObj) {
   const finalName = String(formObj.new_item_name || formObj.item_name || "").trim();
-  if (!finalName) throw new Error("Nama Barang wajib diisi dan tidak boleh kosong");
+  if (!finalName) throw new Error("Item Name is required and cannot be empty");
   
   console.log("[ONBOARDING DEBUG] processOnboarding called with: " + JSON.stringify(formObj));
   
@@ -744,7 +744,7 @@ function processOnboarding(formObj) {
     buy_price: formObj.buy_price || formObj.buyPrice || 0,
     quantity: formObj.quantity || formObj.stock || 0,
     min_stock: formObj.min_stock || formObj.minStock || 0,
-    unit: formObj.unit || formObj.satuan || "pcs",
+    unit: formObj.unit || formObj.Unit || "pcs",
     branch: formObj.branch || ""
   };
   
@@ -789,7 +789,7 @@ function processOnboarding(formObj) {
     }
     return { success: true, itemName: parsed.new_item_name, _debug: "row=" + rowObj.row + " | sheet not found" };
   }
-  return { success: false, message: "Gagal membuat item." };
+  return { success: false, message: "Failed to create item." };
 }
 
 // Force Clasp Sync
@@ -802,12 +802,12 @@ function testEmailIntegration() {
   try {
     LicenseClient.require();
     if (typeof _processWithAI === "undefined") {
-       throw new Error("Fungsi _processWithAI tidak ditemukan di sistem. Pastikan file Agent tersedia.");
+       throw new Error("Fungsi _processWithAI Not found di sistem. Pastikan file Agent tersedia.");
     }
     
     // Simulasi payload email
     const dummyEmail = Session.getActiveUser().getEmail() || "test@example.com";
-    const dummySubject = "Laporan Stok Dummy";
+    const dummySubject = "Laporan Stock Dummy";
     const dummyBody = "Ada barang masuk 10 unit laptop asus";
     const fullContext = "Subject: " + dummySubject + "\n\nBody: " + dummyBody;
     
@@ -816,6 +816,6 @@ function testEmailIntegration() {
     
     ui.alert("✅ Pengujian Berhasil", "Sistem berhasil meneruskan pesan simulasi ke AI.\n\nSilakan periksa kotak masuk Email Anda atau chat Telegram untuk melihat balasan dari AI.", ui.ButtonSet.OK);
   } catch (err) {
-    ui.alert("❌ Pengujian Gagal", "Pesan Error: " + err.message, ui.ButtonSet.OK);
+    ui.alert("❌ Pengujian Failed", "Pesan Error: " + err.message, ui.ButtonSet.OK);
   }
 }

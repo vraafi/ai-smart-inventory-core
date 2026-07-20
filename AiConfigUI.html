@@ -40,10 +40,10 @@
 <body>
 
   <div class="section">
-    <h3>🤖 Konfigurasi Universal AI</h3>
-    <p class="hint">Pilih provider AI, masukkan API Key dan nama model. URL endpoint otomatis terisi.</p>
+    <h3>🤖 Universal AI Configuration</h3>
+    <p class="hint">Select AI provider, enter API Key and model name. Endpoint URL is filled automatically.</p>
     
-    <label>Provider AI</label>
+    <label>AI Provider</label>
     <select id="aiProvider" onchange="toggleProvider()">
       <option value="nvidia">🟢 NVIDIA (NIM API)</option>
       <option value="groq">⚡ Groq (Ultra Fast)</option>
@@ -53,7 +53,7 @@
       <option value="gemini_native">🔵 Google AI Studio (Gemini)</option>
       <option value="custom">⚙️ Custom Endpoint (Manual URL)</option>
     </select>
-    <div id="providerHint" class="provider-hint">✅ NVIDIA NIM — URL otomatis terisi</div>
+    <div id="providerHint" class="provider-hint">✅ NVIDIA NIM — URL automatically filled</div>
 
     <div id="customUrlField">
       <label>Endpoint URL (Custom)</label>
@@ -61,27 +61,27 @@
     </div>
 
     <label>Model ID</label>
-    <input type="text" id="modelId" placeholder="Contoh: meta/llama-3.3-70b-instruct" />
+    <input type="text" id="modelId" placeholder="Example: meta/llama-3.3-70b-instruct" />
 
-    <label>API Key (Wajib)</label>
-    <input type="text" id="apiKey" placeholder="Masukkan API Key Anda di sini..." />
+    <label>API Key (Required)</label>
+    <input type="text" id="apiKey" placeholder="Enter your API Key here..." />
   </div>
 
   <div class="btn-row">
-    <button class="btn-test" id="btnTest" onclick="testConfig()">🔌 Test Koneksi</button>
-    <button class="btn-save" id="btnSave" onclick="saveConfig()">💾 Simpan</button>
+    <button class="btn-test" id="btnTest" onclick="testConfig()">🔌 Test Connection</button>
+    <button class="btn-save" id="btnSave" onclick="saveConfig()">💾 Save</button>
   </div>
   <div id="status"></div>
 
   <script>
     var PROVIDER_MAP = {
-      "nvidia":        { url: "https://integrate.api.nvidia.com/v1/chat/completions", model: "meta/llama-3.3-70b-instruct", hint: "✅ NVIDIA NIM — URL otomatis terisi", internal: "openrouter" },
-      "groq":          { url: "https://api.groq.com/openai/v1/chat/completions",      model: "llama-3.3-70b-versatile",     hint: "✅ Groq — URL otomatis terisi", internal: "openrouter" },
-      "anthropic":     { url: "https://api.anthropic.com/v1/messages",                 model: "claude-sonnet-4-20250514",    hint: "✅ Claude (Anthropic) — URL otomatis terisi", internal: "openrouter" },
-      "openrouter":    { url: "https://openrouter.ai/api/v1/chat/completions",         model: "meta-llama/llama-3.3-70b-instruct", hint: "✅ OpenRouter — URL otomatis terisi", internal: "openrouter" },
-      "openai":        { url: "https://api.openai.com/v1/chat/completions",            model: "gpt-4o-mini",                 hint: "✅ OpenAI — URL otomatis terisi", internal: "openrouter" },
-      "gemini_native": { url: "",                                                       model: "gemini-2.5-flash",            hint: "✅ Google AI Studio — tidak perlu URL", internal: "gemini_native" },
-      "custom":        { url: "",                                                       model: "",                            hint: "⚙️ Masukkan URL endpoint secara manual", internal: "openrouter" }
+      "nvidia":        { url: "https://integrate.api.nvidia.com/v1/chat/completions", model: "meta/llama-3.3-70b-instruct", hint: "✅ NVIDIA NIM — URL automatically filled", internal: "openrouter" },
+      "groq":          { url: "https://api.groq.com/openai/v1/chat/completions",      model: "llama-3.3-70b-versatile",     hint: "✅ Groq — URL automatically filled", internal: "openrouter" },
+      "anthropic":     { url: "https://api.anthropic.com/v1/messages",                 model: "claude-sonnet-4-20250514",    hint: "✅ Claude (Anthropic) — URL automatically filled", internal: "openrouter" },
+      "openrouter":    { url: "https://openrouter.ai/api/v1/chat/completions",         model: "meta-llama/llama-3.3-70b-instruct", hint: "✅ OpenRouter — URL automatically filled", internal: "openrouter" },
+      "openai":        { url: "https://api.openai.com/v1/chat/completions",            model: "gpt-4o-mini",                 hint: "✅ OpenAI — URL automatically filled", internal: "openrouter" },
+      "gemini_native": { url: "",                                                       model: "gemini-2.5-flash",            hint: "✅ Google AI Studio — URL not needed", internal: "gemini_native" },
+      "custom":        { url: "",                                                       model: "",                            hint: "⚙️ Enter endpoint URL manually", internal: "openrouter" }
     };
 
     // Reverse map: endpoint URL → UI provider key
@@ -155,18 +155,18 @@
       var modelId = document.getElementById('modelId').value.trim();
       var apiKey = document.getElementById('apiKey').value.trim();
 
-      if (!apiKey) { setStatus('error', '❌ API Key wajib diisi untuk test.'); return; }
-      if (!modelId) { setStatus('error', '❌ Model ID wajib diisi untuk test.'); return; }
+      if (!apiKey) { setStatus('error', '❌ API Key is required to test.'); return; }
+      if (!modelId) { setStatus('error', '❌ Model ID is required to test.'); return; }
 
       var btn = document.getElementById('btnTest');
       btn.disabled = true;
       btn.textContent = '⏳ Testing...';
-      setStatus('info', '🔄 Menghubungi ' + provider.toUpperCase() + '...');
+      setStatus('info', '🔄 Contacting ' + provider.toUpperCase() + '...');
 
       google.script.run
         .withSuccessHandler(function(result) {
           btn.disabled = false;
-          btn.textContent = '🔌 Test Koneksi';
+          btn.textContent = '🔌 Test Connection';
           if (result.success) {
             setStatus('success', '✅ ' + result.message);
           } else {
@@ -175,7 +175,7 @@
         })
         .withFailureHandler(function(err) {
           btn.disabled = false;
-          btn.textContent = '🔌 Test Koneksi';
+          btn.textContent = '🔌 Test Connection';
           setStatus('error', '❌ System Error: ' + err.message);
         })
         .testSimpleAIConfig(getInternalProvider(), endpointUrl, modelId, apiKey);
@@ -187,26 +187,26 @@
       var apiKey = document.getElementById('apiKey').value.trim();
       var internalProvider = getInternalProvider();
 
-      if (!apiKey) { setStatus('error', '❌ API Key wajib diisi.'); return; }
-      if (!modelId) { setStatus('error', '❌ Model ID wajib diisi.'); return; }
+      if (!apiKey) { setStatus('error', '❌ API Key is required.'); return; }
+      if (!modelId) { setStatus('error', '❌ Model ID is required.'); return; }
 
       var btn = document.getElementById('btnSave');
       btn.disabled = true;
-      btn.textContent = '⏳ Menyimpan...';
+      btn.textContent = '⏳ Saving...';
 
       google.script.run
         .withSuccessHandler(function(result) {
           btn.disabled = false;
-          btn.textContent = '💾 Simpan';
+          btn.textContent = '💾 Save';
           if (result.success) {
-            setStatus('success', '✅ Konfigurasi tersimpan! API Key & Model ID aman tersimpan.');
+            setStatus('success', '✅ Konfigurasi terSave! API Key & Model ID aman terSave.');
           } else {
             setStatus('error', '❌ ' + result.message);
           }
         })
         .withFailureHandler(function(err) {
           btn.disabled = false;
-          btn.textContent = '💾 Simpan';
+          btn.textContent = '💾 Save';
           setStatus('error', '❌ Error: ' + err.message);
         })
         .saveUniversalConfig(internalProvider, endpointUrl, modelId, apiKey);

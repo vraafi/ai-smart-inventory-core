@@ -220,7 +220,7 @@ function generateTestData() {
   // Build data rows
   const rows = [];
   const formulas = [];
-  const branches = ['Pusat', 'Cabang Jakarta', 'Cabang Bandung', 'Cabang Surabaya', 'Cabang Bali'];
+  const branches = ['Pusat', 'Branch Jakarta', 'Branch Bandung', 'Branch Surabaya', 'Branch Bali'];
 
   allProducts.forEach((product, index) => {
     const paddedIndex = String(index + 1).padStart(5, '0');
@@ -257,7 +257,7 @@ function generateTestData() {
 
   ui.alert('✅ Data Generated!', 
     `Berhasil membuat ${count} produk enterprise!\n\n` +
-    `Kategori: ${categories.length} (${categories.join(', ')})\n\n` +
+    `Category: ${categories.length} (${categories.join(', ')})\n\n` +
     `Sekarang coba tes AI dengan mengetik:\n"Terjual 5 unit iPhone 16 Pro Max dan 3 Samsung Galaxy S25 Ultra"`,
     ui.ButtonSet.OK
   );

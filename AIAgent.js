@@ -87,23 +87,23 @@ const AIAgent = {
 - YOU MUST ENCLOSE YOUR ENTIRE JSON OUTPUT WITHIN A MARKDOWN BLOCK (\`\`\`json ... \`\`\`).
 
 **JSON Schema / Available Commands (cmd):**
-1. UPDATE_CELL (memperbarui nilai sel yang ada)
-2. APPEND_ROW (menambah baris data transaksi/inventory baru)
-3. DELETE_ROW (menghapus baris data)
-4. ASK_USER (jika ambigu)
-5. UNKNOWN (jika barang tidak ditemukan)
+1. UPDATE_CELL (update existing cell value)
+2. APPEND_ROW (add new transaction/inventory row)
+3. DELETE_ROW (delete a row)
+4. ASK_USER (if ambiguous)
+5. UNKNOWN (if item Not found)
 
 **Rules:**
-1. "branch" MUST be the name of the store/branch mentioned. If not mentioned, set it to "Pusat".
+1. "branch" MUST be the name of the store/branch mentioned. If not mentioned, set it to "Head Office".
 2. "type" MUST be exactly "IN" (restock, bought, received) or "OUT" (sold, sent, lost).
 3. "quantity" MUST be a positive integer.
-4. "itemId": Jika item tidak ditemukan dalam database, JANGAN asumsikan itu item baru kecuali terdapat kata kunci registrasi eksplisit (seperti /onboarding atau [NEW]). Jika tidak ada, kembalikan cmd "UNKNOWN" atau "NOT_FOUND". Jika ADA kata kunci /onboarding, gunakan cmd "APPEND_ROW" dan buat itemId sementara seperti "NEW_ITEM".
+4. "itemId": If the item is Not found in the database, DO NOT assume it's a new item unless there is an explicit registration keyword (like /onboarding or [NEW]). If none, return cmd "UNKNOWN" or "NOT_FOUND". If there IS an /onboarding keyword, use cmd "APPEND_ROW" and make a temporary itemId like "NEW_ITEM".
 5. If the message mentions MULTIPLE items, output a JSON ARRAY of objects.
 6. If the message mentions only ONE item, output a single JSON object.
 7. "notes" should be a short summary of what happened.
-8. DILARANG KERAS MENGUBAH FORMAT TAMPILAN SHEET (seperti row height, font, warna). HANYA GUNAKAN COMMAND UNTUK MENGUBAH DATA INVENTARIS/TRANSAKSI.
-9. Jika permintaan sangat membingungkan atau ambigu, keluarkan: { "cmd": "ASK_USER", "question": "Tuliskan pertanyaan spesifik Anda dalam bahasa Indonesia di sini" }
-10. KONTEKS PERCAKAPAN: Teks input mungkin berisi percakapan gabungan (contoh: teks asli + pertanyaan AI + jawaban singkat pengguna). Pahami seluruh riwayat tersebut untuk mengekstrak data utuh. Jika pengguna menjawab "Goreng", terapkan pada barang "Indomie Goreng" dari laporan awal.
+8. STRICTLY PROHIBITED TO CHANGE SHEET DISPLAY FORMATTING (like row height, font, color). ONLY USE COMMANDS TO CHANGE INVENTORY/TRANSACTION DATA.
+9. If the request is highly confusing or ambiguous, output: { "cmd": "ASK_USER", "question": "Write your specific question in English here" }
+10. CONVERSATION CONTEXT: The input text might contain a combined conversation (Example: original text + AI question + user short answer). Understand the entire history to extract the full data. If the user answers "Fried", apply it to the item "Indomie Fried" from the initial report.
 
 **Inventory Context:**
 ${inventoryContext}
@@ -134,21 +134,21 @@ ${inventoryContext}
       
       if (parsed) {
          // SELF VERIFICATION
-         let verifySys = "Anda adalah auditor QA internal. Verifikasi apakah JSON ini sudah memenuhi instruksi pengguna dengan tepat. Jawab HANYA dengan kata 'SUDAH' jika benar. Jika ada kesalahan logika, salah qty, salah nama barang, atau klasifikasi IN/OUT yang salah, sebutkan detail kesalahannya agar AI utama bisa memperbaiki.";
-         let verifyPrompt = "\nInstruksi Pengguna: \"" + rawText + "\"\n\nJSON yang dihasilkan:\n" + JSON.stringify(parsed) + "\n\nApakah JSON ini sudah tepat sasaran?";
+         let verifySys = "You are an internal QA auditor. Verify if this JSON precisely fulfills the user's instructions. Answer ONLY with the word 'DONE' if correct. If there are logic errors, wrong qty, wrong Item Name, or wrong IN/OUT classification, state the error details so the main AI can fix it.";
+         let verifyPrompt = "\nUser Instructions: \"" + rawText + "\"\n\nGenerated JSON:\n" + JSON.stringify(parsed) + "\n\nIs this JSON accurate?";
          let verifyResult = callAI(verifyPrompt, verifySys);
          
-         if (verifyResult.trim().toUpperCase().startsWith("SUDAH") || attempt === maxAttempts) {
+         if (verifyResult.trim().toUpperCase().startsWith("DONE") || attempt === maxAttempts) {
              finalParsed = parsed;
              success = true;
              break;
          } else {
-             // Berikan feedback ke currentPrompt
-             currentPrompt = rawText + "\n\n[PERINGATAN DARI AUDITOR QA (Percobaan " + attempt + ")]:\n" + verifyResult + "\n\nTolong evaluasi kesalahan Anda dan perbaiki JSON Anda berdasarkan feedback di atas!";
+             // Give feedback to currentPrompt
+             currentPrompt = rawText + "\n\n[WARNING FROM QA AUDITOR (Attempt " + attempt + ")]:\n" + verifyResult + "\n\nPlease evaluate your mistake and fix your JSON based on the feedback above!";
              attempt++;
          }
       } else {
-         currentPrompt = rawText + "\n\n[ERROR FORMATTING (Percobaan " + attempt + ")]:\nGagal membaca JSON. Pastikan output HANYA JSON block.";
+         currentPrompt = rawText + "\n\n[FORMATTING ERROR (Attempt " + attempt + ")]:\nFailed reading JSON. Ensure output is ONLY a JSON block.";
          attempt++;
       }
     }
@@ -197,7 +197,7 @@ ${inventoryContext}
     try {
       return JSON.parse(cleaned);
     } catch(e) {
-      throw new Error("Gagal memproses output AI menjadi JSON. Raw output:\n" + text.substring(0, 500));
+      throw new Error("Failed memproses output AI menjadi JSON. Raw output:\n" + text.substring(0, 500));
     }
   },
 
@@ -214,28 +214,28 @@ ${inventoryContext}
 - YOU MUST ENCLOSE YOUR ENTIRE JSON OUTPUT WITHIN A MARKDOWN BLOCK (\`\`\`json ... \`\`\`).
 
 **Available Commands (cmd):**
-1. SET_BACKGROUND (butuh: range, color) -> color HEX format (#ffffff)
-2. SET_FONT_COLOR (butuh: range, color) -> color HEX format
-3. SET_FONT_FAMILY (butuh: range, fontFamily)
-4. SET_FONT_SIZE (butuh: range, size) -> size angka
-5. SET_TEXT_STYLE (butuh: range, isBold, isItalic, isStrikethrough, isUnderline) -> nilai boolean
-6. SET_HORIZONTAL_ALIGNMENT (butuh: range, alignment) -> "left", "center", "right"
-7. SET_ROW_HEIGHT (butuh: startRow, height, numRows)
-8. AUTO_RESIZE_COLUMNS (butuh: startCol, numCols)
-9. SET_FONT_WEIGHT (butuh: range, weight) -> "bold" atau "normal"
-10. REPAIR_FORMULA (tidak butuh parameter) -> perbaiki #ERROR!
-11. ASK_USER (butuh: question) -> jika ambigu, isi 'question' dengan pertanyaan spesifik dalam bahasa Indonesia
-12. CLEAR_CONTENT (butuh: range) -> hapus teks tanpa hapus format
-13. SET_BORDER (butuh: range, top, left, bottom, right, vertical, horizontal, color, style) -> boolean untuk sisi (true/false), color HEX, style = "SOLID", "SOLID_MEDIUM", "SOLID_THICK", "DASHED", "DOTTED", "DOUBLE"
+1. SET_BACKGROUND (needs: range, color) -> color HEX format (#ffffff)
+2. SET_FONT_COLOR (needs: range, color) -> color HEX format
+3. SET_FONT_FAMILY (needs: range, fontFamily)
+4. SET_FONT_SIZE (needs: range, size) -> size is number
+5. SET_TEXT_STYLE (needs: range, isBold, isItalic, isStrikethrough, isUnderline) -> boolean values
+6. SET_HORIZONTAL_ALIGNMENT (needs: range, alignment) -> "left", "center", "right"
+7. SET_ROW_HEIGHT (needs: startRow, height, numRows)
+8. AUTO_RESIZE_COLUMNS (needs: startCol, numCols)
+9. SET_FONT_WEIGHT (needs: range, weight) -> "bold" or "normal"
+10. REPAIR_FORMULA (no params) -> fix #ERROR!
+11. ASK_USER (needs: question) -> if ambiguous, fill 'question' with a specific English question
+12. CLEAR_CONTENT (needs: range) -> clear text without clearing format
+13. SET_BORDER (needs: range, top, left, bottom, right, vertical, horizontal, color, style) -> boolean for sides (true/false), color HEX, style = "SOLID", "SOLID_MEDIUM", "SOLID_THICK", "DASHED", "DOTTED", "DOUBLE"
 
 **Rules:**
-- Jika sebut "semua kolom ke 1", asumsikan "range": "A:A" atau "startCol": 1.
-- Jika sebut huruf kolom ("kolom d"), format "range": "D:D".
-- Warna basic = "#ffffff" (bg) atau "#000000" (teks).
-- Jika user meminta "garis batas" atau "border tabel", wajib gunakan SET_BORDER.
-- Jika error/perbaiki rumus = WAJIB REPAIR_FORMULA.
-- Jika basic/kembali ke basic = WAJIB RESET_FORMAT.
-- (Jika tidak disebut sheet, default "Inventory")
+- If mention "all column 1", assume "range": "A:A" or "startCol": 1.
+- If mention column letter ("column d"), format "range": "D:D".
+- Basic colors = "#ffffff" (bg) or "#000000" (text).
+- If user asks for "table border" or "boundaries", MUST use SET_BORDER.
+- If fix formula error = MUST REPAIR_FORMULA.
+- If basic/return to basic = MUST RESET_FORMAT.
+- (If no sheet is mentioned, default "Inventory")
 
 **Output Format Example:**
 [

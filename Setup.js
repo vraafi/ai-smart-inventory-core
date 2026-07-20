@@ -1051,7 +1051,7 @@ function refreshDashboard() {
 function refreshDashboardClick() {
   refreshDashboard();
   navDashboard();
-  SpreadsheetApp.getUi().alert("✅ Dashboard Terkini", "Data sukses diambil langsung dari pusat database.", SpreadsheetApp.getUi().ButtonSet.OK);
+  SpreadsheetApp.getUi().alert("✅ Dashboard Terkini", "Data Success diambil langsung dari pusat database.", SpreadsheetApp.getUi().ButtonSet.OK);
 }
 
 // ─── LICENSE MANAGER (ADMIN ONLY) ────────────────────────────
@@ -1324,10 +1324,10 @@ function _getInventoryColMap(headers) {
   // Supports English, Indonesian, Spanish, French, German, and common abbreviations.
   const rules = [
     // Stock In/Out MUST be checked before generic "stock"
-    ["stockIn",  h => h.includes("stock in") || h.includes("stok masuk") || h.includes("total in") || h === "masuk" || h === "in" || h.includes("entrada") || h.includes("entree") || h.includes("zugang")],
-    ["stockOut", h => h.includes("stock out") || h.includes("stok keluar") || h.includes("total out") || h === "keluar" || h === "out" || h.includes("salida") || h.includes("sortie") || h.includes("abgang")],
+    ["stockIn",  h => h.includes("stock in") || h.includes("Stock masuk") || h.includes("total in") || h === "masuk" || h === "in" || h.includes("entrada") || h.includes("entree") || h.includes("zugang")],
+    ["stockOut", h => h.includes("stock out") || h.includes("Stock keluar") || h.includes("total out") || h === "keluar" || h === "out" || h.includes("salida") || h.includes("sortie") || h.includes("abgang")],
     // Min stock MUST be checked before generic "stock"
-    ["minStock", h => (h.includes("min") && (h.includes("stock") || h.includes("stok"))) || h.includes("reorder") || h.includes("safety") || h.includes("minimo")],
+    ["minStock", h => (h.includes("min") && (h.includes("stock") || h.includes("Stock"))) || h.includes("reorder") || h.includes("safety") || h.includes("minimo")],
     // Initial stock (new specific rule to prevent generic stock from grabbing it)
     ["initialStock", h => h.includes("initial") || h.includes("awal") || h.includes("mulai")],
     // Buy/Sell Prices
@@ -1340,16 +1340,16 @@ function _getInventoryColMap(headers) {
     // Item Name
     ["name",     h => h.includes("nama") || (h.includes("name") && !h.includes("code")) || h.includes("barang") || h.includes("produk") || h.includes("product") || (h.includes("item") && !h.includes("code")) || h.includes("nombre") || h.includes("nom") || h.includes("artikel")],
     // Category
-    ["category", h => h.includes("kategori") || h.includes("category") || h.includes("jenis") || h.includes("tipe") || h.includes("type") || h.includes("categoria") || h.includes("categoría") || h.includes("catégorie") || h.includes("kategorie")],
+    ["category", h => h.includes("Category") || h.includes("category") || h.includes("jenis") || h.includes("tipe") || h.includes("type") || h.includes("categoria") || h.includes("categoría") || h.includes("catégorie") || h.includes("Categorye")],
     // Branch / Location
-    ["branch",   h => h.includes("cabang") || h.includes("branch") || h.includes("toko") || h.includes("lokasi") || h.includes("gudang") || h.includes("warehouse") || h.includes("location") || h.includes("sucursal") || h.includes("succursale") || h.includes("filiale")],
+    ["branch",   h => h.includes("Branch") || h.includes("branch") || h.includes("toko") || h.includes("lokasi") || h.includes("gudang") || h.includes("warehouse") || h.includes("location") || h.includes("sucursal") || h.includes("succursale") || h.includes("filiale")],
     // Unit (but NOT if header also contains "harga/price")
-    ["unit",     h => !h.includes("harga") && !h.includes("price") && (h === "satuan" || h === "unit" || h === "uom" || h.includes("unidad") || h.includes("unite") || h.includes("einheit"))],
+    ["unit",     h => !h.includes("harga") && !h.includes("price") && (h === "Unit" || h === "unit" || h === "uom" || h.includes("unidad") || h.includes("unite") || h.includes("einheit"))],
     // Status
     ["status",   h => h.includes("status") || h.includes("kondisi") || h.includes("state") || h.includes("estado") || h.includes("etat")],
     // Generic Stock / Current Stock (checked LAST so specific stock in/out/min/initial get matched first)
     // EXCLUDE 'initial' and 'awal' so it specifically targets current stock
-    ["stock",    h => !h.includes("initial") && !h.includes("awal") && (h.includes("stock") || h.includes("stok") || h.includes("qty") || h.includes("quantity") || h.includes("jumlah") || h.includes("persediaan") || h.includes("saldo") || h.includes("inventario") || h.includes("inventaire") || h.includes("bestand") || h.includes("cantidad"))],
+    ["stock",    h => !h.includes("initial") && !h.includes("awal") && (h.includes("stock") || h.includes("Stock") || h.includes("qty") || h.includes("quantity") || h.includes("jumlah") || h.includes("persediaan") || h.includes("saldo") || h.includes("inventario") || h.includes("inventaire") || h.includes("bestand") || h.includes("cantidad"))],
   ];
 
   for (let i = 0; i < normalized.length; i++) {
@@ -1387,7 +1387,7 @@ function _getTransactionColMap(headers) {
     ["code",        h => h.includes("code") || h.includes("kode") || h.includes("sku") || h.includes("codigo") || h.includes("código") || h.includes("id")],
     ["name",        h => h.includes("name") || h.includes("nama") || h.includes("barang") || h.includes("product") || h.includes("nombre") || h.includes("nom") || h.includes("artikel")],
     ["qty",         h => h.includes("qty") || h.includes("quantity") || h.includes("jumlah") || h.includes("cantidad") || h.includes("quantite") || h.includes("menge")],
-    ["branch",      h => h.includes("branch") || h.includes("cabang") || h.includes("lokasi") || h.includes("sucursal") || h.includes("filiale")],
+    ["branch",      h => h.includes("branch") || h.includes("Branch") || h.includes("lokasi") || h.includes("sucursal") || h.includes("filiale")],
     ["buyPrice",    h => h.includes("buy") || h.includes("beli") || h.includes("modal")],
     ["sellPrice",   h => h.includes("sell") || h.includes("jual")],
     ["profit",      h => h.includes("profit") || h.includes("untung") || h.includes("laba") || h.includes("margin") || h.includes("beneficio")],
@@ -1448,7 +1448,7 @@ function repairInventoryFormulas() {
   const cMin = cmap.minStock !== -1 ? _colLetter(cmap.minStock) : null;
 
   if (cmap.stock === -1 || !cIn || !cOut || !cInit) {
-    SpreadsheetApp.getUi().alert("Error: Missing required columns (Stok, Total In, Total Out, Initial Stock).");
+    SpreadsheetApp.getUi().alert("Error: Missing required columns (Stock, Total In, Total Out, Initial Stock).");
     return;
   }
 
@@ -1466,7 +1466,7 @@ function repairInventoryFormulas() {
       count++;
     }
   }
-  SpreadsheetApp.getUi().alert("✅ Selesai!", `Berhasil memperbaiki formula stok dan status untuk ${count} barang.`, SpreadsheetApp.getUi().ButtonSet.OK);
+  SpreadsheetApp.getUi().alert("✅ Done!", `Berhasil memperbaiki formula Stock dan status untuk ${count} barang.`, SpreadsheetApp.getUi().ButtonSet.OK);
 }
 
 function showRepairDialog() {

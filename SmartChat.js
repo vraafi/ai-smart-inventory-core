@@ -11,7 +11,7 @@ function processSmartChat(payload) {
     const webUiChatId = "WEB_UI_USER";
     const pendingState = _getPendingState(webUiChatId);
     if (pendingState && pendingState.originalText) {
-      // Gabungkan teks lama dengan jawaban baru dari user
+      // Combine previous text with user's new answer
       text = pendingState.originalText + "\n[AI Asked: " + pendingState.aiQuestion + "]\n[User Answer: " + text + "]";
       _clearPendingState(webUiChatId);
     }
@@ -27,7 +27,7 @@ function processSmartChat(payload) {
       if (extractedText) {
         fullContext += `\n\n[FILE CONTENT: ${payload.fileName}]\n${extractedText}`;
       } else {
-         return "❌ Gagal mengekstrak teks dari file. Pastikan file valid.";
+         return "❌ Failed extracting text from file. Ensure file is valid.";
       }
     }
 
@@ -38,7 +38,7 @@ function processSmartChat(payload) {
        if (extractedText) {
           fullContext += `\n\n[GOOGLE SHEETS CONTENT]\n${extractedText}`;
        } else {
-          return "❌ Gagal mengekstrak teks dari tautan Google Sheets.";
+          return "❌ Failed extracting text from Google Sheets link.";
        }
     }
 
@@ -57,20 +57,20 @@ function processSmartChat(payload) {
 - YOU MUST ENCLOSE YOUR ENTIRE JSON OUTPUT WITHIN A MARKDOWN BLOCK (\`\`\`json ... \`\`\`).
 
 **Available Commands (cmd):**
-1. CLEAR_CONTENTS (butuh: sheet, range) -> hapus isi data tanpa hapus format. Contoh range: "A2:Z" untuk hapus semua baris data kecuali header.
-2. CLEAR_FORMATS (butuh: sheet, range) -> hapus format saja, data tetap.
-3. DELETE_COLUMNS (butuh: sheet, start, count) -> hapus kolom secara fisik. 'start' = nomor kolom (1=A, 2=B, ..., 10=J). 'count' = jumlah kolom yang dihapus.
-4. DELETE_ROWS (butuh: sheet, start, count) -> hapus baris secara fisik. 'start' = nomor baris. 'count' = jumlah baris.
-5. ASK_USER (butuh: question) -> jika ambigu, isi 'question' dengan pertanyaan spesifik dalam bahasa Indonesia.
+1. CLEAR_CONTENTS (needs: sheet, range) -> clear data content without clearing format. Example range: "A2:Z" to clear all rows except header.
+2. CLEAR_FORMATS (needs: sheet, range) -> clear format only, data stays.
+3. DELETE_COLUMNS (needs: sheet, start, count) -> physically delete columns. 'start' = column number (1=A, 2=B, ..., 10=J). 'count' = number of deleted columns.
+4. DELETE_ROWS (needs: sheet, start, count) -> physically delete rows. 'start' = row number. 'count' = number of rows.
+5. ASK_USER (needs: question) -> if ambiguous, fill 'question' with a specific English question.
 
 **Rules:**
-- "kolom nomor 10" = kolom ke-10 (kolom J). Gunakan DELETE_COLUMNS dengan start:10, count:1.
-- "hapus semua kolom dari 10 sampai 13" = DELETE_COLUMNS dengan start:10, count:4.
-- "hapus baris 5 sampai 20" = DELETE_ROWS dengan start:5, count:16.
-- "hapus semua data di inventory" = CLEAR_CONTENTS dengan range "A2:Z".
-- "hapus isi kolom J" = CLEAR_CONTENTS dengan range "J2:J".
-- Jika user menyebut nama sheet, gunakan nama itu. Default: "Inventory".
-- JANGAN pernah hapus baris 1 (header).
+- "column number 10" = 10th column (column J). Use DELETE_COLUMNS with start:10, count:1.
+- "delete all columns from 10 to 13" = DELETE_COLUMNS with start:10, count:4.
+- "delete rows 5 to 20" = DELETE_ROWS with start:5, count:16.
+- "delete all data in inventory" = CLEAR_CONTENTS with range "A2:Z".
+- "delete content of column J" = CLEAR_CONTENTS with range "J2:J".
+- If user mentions a sheet name, use that name. Default: "Inventory".
+- NEVER delete row 1 (header).
 
 **User Request:** "${wipeCmd}"`;
            
@@ -80,14 +80,14 @@ function processSmartChat(payload) {
              if (!Array.isArray(actionArr)) {
                if (actionArr && actionArr.cmd === "ASK_USER") {
                   const webUiChatId = "WEB_UI_USER";
-                  const qMsg = `🤔 AI Membutuhkan Klarifikasi:\n${actionArr.question}`;
+                  const qMsg = `🤔 AI Needs Clarification:\n${actionArr.question}`;
                   _savePendingState(webUiChatId, fullContext, qMsg);
                   return qMsg;
                }
                actionArr = [actionArr];
              }
              if (actionArr.length === 0 || !actionArr[0] || !actionArr[0].cmd) {
-               return "❌ AI gagal menerjemahkan permintaan wipe Anda menjadi tindakan valid.";
+               return "❌ AI Failed to translate your wipe request into valid actions.";
              }
              
              // Execute using the WIPE handler (supports DELETE_COLUMNS, DELETE_ROWS, CLEAR_CONTENTS)
@@ -127,9 +127,9 @@ function processSmartChat(payload) {
              }
              
              if (executedCount > 0) {
-               return `✅ Sukses! Wipe berbasis AI berhasil diterapkan (${executedCount} tindakan).`;
+               return `✅ Success! AI-based wipe successfully applied (${executedCount} actions).`;
              } else {
-               return "⚠️ Tidak ada tindakan wipe yang berhasil dieksekusi. Periksa nama sheet dan parameter.";
+               return "⚠️ No wipe actions successfully executed. Check sheet name and parameters.";
              }
            } catch(e) {
              return "❌ Error parsing wipe AI data: " + e.message;
@@ -151,9 +151,9 @@ function processSmartChat(payload) {
            trxSh.getRange("A2:N" + trxSh.getMaxRows()).clearContent();
            wiped++;
          }
-         return `✅ Sukses! Fitur /wipe berhasil membersihkan data pada ${wiped} lembar tabel tanpa menghapus rumus.`;
+         return `✅ Success! /wipe feature successfully cleared data in ${wiped} sheets without deleting formulas.`;
        } catch (e) {
-         return "❌ Gagal melakukan Wipe: " + e.message;
+         return "❌ Failed melakukan Wipe: " + e.message;
        }
     }
 
@@ -163,7 +163,7 @@ function processSmartChat(payload) {
          const formatCmdText = lowerText.replace("/format", "").trim();
          
          if (formatCmdText === "") {
-           return "Silakan jelaskan bagian mana yang ingin Anda format. Contoh: /format warnai header tabel menjadi merah";
+           return "Please explain which part you want to format. Example: /format color the table header red";
          } 
          
          const actualFormatCmdText = formatCmdText;
@@ -174,35 +174,35 @@ function processSmartChat(payload) {
            if (!Array.isArray(actionArr)) {
              if (actionArr && actionArr.cmd === "ASK_USER") {
                 const webUiChatId = "WEB_UI_USER";
-                const qMsg = `🤔 AI Membutuhkan Klarifikasi:\n${actionArr.question}`;
+                const qMsg = `🤔 AI Needs Clarification:\n${actionArr.question}`;
                 _savePendingState(webUiChatId, fullContext, qMsg);
                 return qMsg;
              }
              actionArr = [actionArr];
            }
            if (actionArr.length === 0 || !actionArr[0] || !actionArr[0].cmd) {
-             return "❌ AI gagal menerjemahkan permintaan format Anda menjadi tindakan valid.";
+             return "❌ AI Failed to translate your formatting request into valid actions.";
            }
            
            // Run the format actions with null source and chatId
            const result = _executeFormatAction(actionArr, null, null);
            
            if (result.success) {
-             return `✅ Sukses! Format khusus berbasis AI berhasil diterapkan (${result.count} tindakan).`;
+             return `✅ Success! AI-based custom formatting successfully applied (${result.count} actions).`;
            } else {
-             return `⚠️ Beberapa format mungkin gagal: ${result.message}`;
+             return `⚠️ Beberapa format mungkin Failed: ${result.message}`;
            }
          }
        } catch (e) {
-          return "❌ Gagal melakukan Format: " + e.message;
+          return "❌ Failed melakukan Format: " + e.message;
        }
     }
     
     if (lowerText.startsWith("/onboarding")) {
        if (lowerText === "/onboarding" && !payload.fileData) {
-          return "Silakan masukkan detail barang baru, lampirkan file nota, atau paste link Google Sheets. Contoh: '/onboarding 10pcs Macbook Pro M4 harga 25000000'";
+          return "Please enter New item details, attach a receipt file, or paste a Google Sheets link. Example: '/onboarding 10pcs Macbook Pro M4 price 2500'";
        }
-               const prompt = `**Task:** Ekstrak data registrasi barang baru dari teks berikut:\n\n"${fullContext}"\n\n**CRITICAL CONSTRAINTS - VIOLATING THESE WILL CAUSE A SYSTEM CRASH:**\n- DO NOT print conversational filler.\n- DO NOT think step-by-step.\n- YOU MUST ENCLOSE YOUR ENTIRE JSON OUTPUT WITHIN A MARKDOWN BLOCK (\`\`\`json ... \`\`\`).\n\n**Output Format Example:**\n\`\`\`json\n[{"item_code":"kode_barang", "new_item_name":"nama_barang_lengkap", "quantity":jumlah_stok, "min_stock":batas_minimum, "unit":"satuan", "new_price":harga_jual, "buy_price":harga_beli, "branch":"nama_cabang", "new_category":"kategori_barang"}]\n\`\`\`\n\nJika data SANGAT membingungkan sehingga Anda TIDAK BISA menebak nama barangnya sama sekali, keluarkan JSON: \`\`\`json\n{ "cmd": "ASK_USER", "question": "Tuliskan pertanyaan spesifik Anda di sini, JANGAN gunakan titik-titik (...)" }\n\`\`\`\n\n**Rules:**\n- Ekstrak sebanyak mungkin data yang ada (seperti kode, nama, stok, kategori).\n- Abaikan teks yang berulang atau typo dari user, rangkai nama barang dengan logis.\n- Jika ada data yang tidak disebutkan, abaikan (jangan dimasukkan ke JSON) atau setel ke 0.\n- SELALU utamakan mengekstrak menjadi array of JSON daripada meminta klarifikasi, asalkan ada nama barang.`;
+               const prompt = `**Task:** Extract New item registration data from the following text:\n\n"${fullContext}"\n\n**CRITICAL CONSTRAINTS - VIOLATING THESE WILL CAUSE A SYSTEM CRASH:**\n- DO NOT print conversational filler.\n- DO NOT think step-by-step.\n- YOU MUST ENCLOSE YOUR ENTIRE JSON OUTPUT WITHIN A MARKDOWN BLOCK (\`\`\`json ... \`\`\`).\n\n**Output Format Example:**\n\`\`\`json\n[{"item_code":"kode_barang", "new_item_name":"item_full_name", "quantity":stock_amount, "min_stock":minimum_limit, "unit":"Unit", "new_price":sell_price, "buy_price":buy_price, "branch":"branch_name", "new_category":"item_category"}]\n\`\`\`\n\nIf the data is SO confusing that you CANNOT guess the Item Name at all, output JSON: \`\`\`json\n{ "cmd": "ASK_USER", "question": "Write your specific English question here, DO NOT use ellipses (...)" }\n\`\`\`\n\n**Rules:**\n- Extract as much data as possible (like code, name, Stock, Category).\n- Ignore repetitive text or typos from the user, construct the Item Name logically.\n- If any data is not mentioned, ignore it (do not include in JSON) or set to 0.\n- ALWAYS prioritize extracting into a JSON array over asking for clarification, as long as there is an Item Name.`;
        const aiRaw = callAI(prompt);
        
        try {
@@ -218,7 +218,7 @@ function processSmartChat(payload) {
           let items = Array.isArray(parsedData) ? parsedData : [parsedData];
           
           if (!Array.isArray(items) || items.length === 0) {
-             return "❌ AI gagal mengekstrak data barang dari teks/file yang diberikan.";
+             return "❌ AI Failed mengekstrak data barang dari teks/file yang diberikan.";
           }
           
           let successCount = 0;
@@ -237,8 +237,8 @@ function processSmartChat(payload) {
              else errors.push(`${item.new_item_name}: ${result.message}`);
           }
           
-          let msg = `✅ Sukses! ${successCount} barang baru berhasil diregistrasi.`;
-          if (errors.length > 0) msg += `\n⚠️ Gagal meregistrasi ${errors.length} barang:\n- ` + errors.join("\n- ");
+          let msg = `✅ Success! ${successCount} New item berhasil diregistrasi.`;
+          if (errors.length > 0) msg += `\n⚠️ Failed meregistrasi ${errors.length} barang:\n- ` + errors.join("\n- ");
           if (debugInfo) msg += `\n🔍 DEBUG: ${debugInfo}`;
           return msg;
        } catch (e) {
@@ -252,14 +252,14 @@ function processSmartChat(payload) {
     const result = processAutonomousInput(fullContext);
     
     if (result.success) {
-       return `✅ Sukses memproses ${result.count} data transaksi dari pesan Anda.`;
+       return `✅ Success memproses ${result.count} data transaksi dari pesan Anda.`;
     } else if (result.isQuestion) {
        const webUiChatId = "WEB_UI_USER";
        const qMsg = `🤔 AI Membutuhkan Klarifikasi:\n${result.message}`;
        _savePendingState(webUiChatId, fullContext, qMsg);
        return qMsg;
     } else {
-       return `❌ Gagal memproses transaksi: ${result.message}`;
+       return `❌ Failed memproses transaksi: ${result.message}`;
     }
 
   } catch (err) {

@@ -10,22 +10,22 @@ const WhatsAppService = {
   getCredentials: function() {
     const props = _getScriptProps();
     return {
-      accessToken: props.getProperty('WA_ACCESS_TOKEN') || '',
+      accesStocken: props.getProperty('WA_ACCESS_TOKEN') || '',
       phoneId: props.getProperty('WA_PHONE_NUMBER_ID') || '',
       verifyToken: props.getProperty('WA_VERIFY_TOKEN') || ''
     };
   },
   
-  saveCredentials: function(accessToken, phoneId, verifyToken) {
+  saveCredentials: function(accesStocken, phoneId, verifyToken) {
     const props = _getScriptProps();
-    props.setProperty('WA_ACCESS_TOKEN', accessToken || '');
+    props.setProperty('WA_ACCESS_TOKEN', accesStocken || '');
     props.setProperty('WA_PHONE_NUMBER_ID', phoneId || '');
     props.setProperty('WA_VERIFY_TOKEN', verifyToken || '');
   },
 
   sendMessage: function(recipientPhone, textMsg) {
     const creds = this.getCredentials();
-    if (!creds.accessToken || !creds.phoneId) {
+    if (!creds.accesStocken || !creds.phoneId) {
       throw new Error("WhatsApp API credentials are not set.");
     }
 
@@ -45,7 +45,7 @@ const WhatsAppService = {
       method: "post",
       contentType: "application/json",
       headers: {
-        "Authorization": `Bearer ${creds.accessToken}`
+        "Authorization": `Bearer ${creds.accesStocken}`
       },
       payload: JSON.stringify(payload),
       muteHttpExceptions: true

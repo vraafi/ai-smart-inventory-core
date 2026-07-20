@@ -33,7 +33,7 @@ function runAllTests() {
     },
     {
       name: "5. WIPE COMMAND TEST",
-      text: "/wipe tolong hapus semua isi tabel cabang",
+      text: "/wipe tolong hapus semua isi tabel Branch",
       expectedBehavior: "Should generate 4 options (a,b,c,d) for wiping data"
     }
   ];

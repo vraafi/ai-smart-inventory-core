@@ -26,7 +26,7 @@ function _extractTextFromBlob(blob) {
     }
   } catch (e) {
     Logger.log("DocumentParser error: " + e.message);
-    throw new Error("Gagal membaca dokumen: " + e.message);
+    throw new Error("Failed membaca dokumen: " + e.message);
   }
   
   return text;
@@ -113,7 +113,7 @@ function _getRawDataArrayFromUrl(url) {
     if (e.message.toLowerCase().includes("permission")) {
        throw new Error("Akses ditolak (Permission Denied). Mohon ubah akses link Google Sheets Anda menjadi 'Siapa saja yang memiliki link dapat melihat' (Anyone with the link can view).");
     }
-    throw new Error("Gagal mengekstrak link: " + e.message);
+    throw new Error("Failed mengekstrak link: " + e.message);
   }
 }
 
@@ -142,7 +142,7 @@ function _extractTextFromUrl(url) {
     if (e.message.toLowerCase().includes("permission")) {
        throw new Error("Akses ditolak (Permission Denied). Mohon ubah akses link Google Sheets Anda menjadi 'Siapa saja yang memiliki link dapat melihat' (Anyone with the link can view).");
     }
-    throw new Error("Gagal mengekstrak link: " + e.message);
+    throw new Error("Failed mengekstrak link: " + e.message);
   }
 }
 
@@ -193,7 +193,7 @@ function _readImageOrPdfViaDriveOcr(blob) {
     text = doc.getBody().getText();
   } catch (e) {
     Logger.log("OCR Error: " + e.message);
-    throw new Error("Gagal membaca gambar/PDF (OCR Error): " + e.message);
+    throw new Error("Failed membaca gambar/PDF (OCR Error): " + e.message);
   } finally {
     // Always delete the temporary file!
     try {

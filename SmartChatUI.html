@@ -275,7 +275,7 @@
   </div>
 
   <div class="action-menu" id="actionMenu">
-    <button class="action-item" onclick="triggerAction('/onboarding')">🆕 Registrasi Barang Baru</button>
+    <button class="action-item" onclick="triggerAction('/onboarding')">🆕 Registrasi New item</button>
     <button class="action-item" onclick="triggerAction('/format')">🧹 Format Sheet</button>
     <button class="action-item danger" onclick="triggerAction('/wipe')">⚠️ Wipe Data (Reset)</button>
   </div>
@@ -320,13 +320,13 @@
       const inputEl = document.getElementById('msgInput');
       
       if (command === '/onboarding') {
-        appendMessage("Memulai Registrasi Barang Baru. Ketik detail barang (contoh: 10pcs Macbook Pro 2026 harga 25000000) atau lampirkan file (nota/CSV/PDF).", 'ai');
+        appendMessage("Memulai Registrasi New item. Ketik detail barang (Example: 10pcs Macbook Pro 2026 harga 25000000) atau lampirkan file (nota/CSV/PDF).", 'ai');
         inputEl.value = "/onboarding ";
       } else if (command === '/wipe') {
-        appendMessage("Anda bisa menghapus spesifik (contoh: '/wipe hapus baris 5 di tabel transaksi').\\n⚠️ PERINGATAN: Jika Anda mengetik '/wipe confirm', SELURUH data di lembar Inventory & Transactions akan DIKOSONGKAN.", 'ai');
+        appendMessage("Anda bisa menghapus spesifik (Example: '/wipe hapus baris 5 di tabel transaksi').\\n⚠️ PERINGATAN: Jika Anda mengetik '/wipe confirm', SELURUH data di lembar Inventory & Transactions akan DIKOSONGKAN.", 'ai');
         inputEl.value = "/wipe ";
       } else if (command === '/format') {
-        appendMessage("Silakan jelaskan bagian mana yang ingin Anda format. Contoh: warnai header tabel menjadi merah.", 'ai');
+        appendMessage("Silakan jelaskan bagian mana yang ingin Anda format. Example: warnai header tabel menjadi merah.", 'ai');
         inputEl.value = "/format ";
       } else {
         // Fallback for other commands

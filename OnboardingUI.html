@@ -52,26 +52,26 @@
   <!-- MANUAL ONBOARDING -->
   <div id="tab-manual" class="tab-content active">
     <div class="form-group">
-      <label>Nama Barang *</label>
-      <input type="text" id="name" placeholder="Contoh: Yakult 5 Pack">
+      <label>Item Name *</label>
+      <input type="text" id="name" placeholder="Example: Yakult 5 Pack">
     </div>
     <div class="form-group">
-      <label>Kategori</label>
-      <input type="text" id="category" placeholder="Contoh: Minuman">
+      <label>Category</label>
+      <input type="text" id="category" placeholder="Example: Minuman">
     </div>
     <div class="form-group">
-      <label>Harga Beli (Modal) - Rp</label>
-      <input type="number" id="buyPrice" placeholder="Contoh: 8000">
+      <label>Buy Price (Modal) - Rp</label>
+      <input type="number" id="buyPrice" placeholder="Example: 8000">
     </div>
     <div class="form-group">
-      <label>Harga Jual - Rp</label>
-      <input type="number" id="price" placeholder="Contoh: 11000">
+      <label>Sell Price - Rp</label>
+      <input type="number" id="price" placeholder="Example: 11000">
     </div>
     <div class="form-group">
-      <label>Stok Awal</label>
-      <input type="number" id="stock" placeholder="Contoh: 50" value="0">
+      <label>Stock Awal</label>
+      <input type="number" id="stock" placeholder="Example: 50" value="0">
     </div>
-    <button class="btn" id="saveBtn" onclick="saveItem()">Simpan Barang Baru</button>
+    <button class="btn" id="saveBtn" onclick="saveItem()">Save New item</button>
     <div id="status-manual" class="status"></div>
   </div>
 
@@ -97,17 +97,17 @@
           <thead>
             <tr>
               <th>Aksi</th>
-              <th>Nama Barang</th>
-              <th>Kategori</th>
+              <th>Item Name</th>
+              <th>Category</th>
               <th>Harga Modal</th>
-              <th>Harga Jual</th>
-              <th>Stok</th>
+              <th>Sell Price</th>
+              <th>Stock</th>
             </tr>
           </thead>
           <tbody id="previewBody"></tbody>
         </table>
       </div>
-      <button class="btn" id="saveBulkBtn" onclick="saveBulkData()">💾 Simpan Semua Data</button>
+      <button class="btn" id="saveBulkBtn" onclick="saveBulkData()">💾 Save Semua Data</button>
     </div>
   </div>
 
@@ -122,11 +122,11 @@
     // --- MANUAL ONBOARDING ---
     function saveItem() {
       const name = document.getElementById("name").value.trim();
-      if (!name) return alert("Nama barang wajib diisi!");
+      if (!name) return alert("Item Name is required!");
       
       const btn = document.getElementById("saveBtn");
       const stat = document.getElementById("status-manual");
-      btn.disabled = true; btn.innerText = "Menyimpan..."; stat.innerText = "";
+      btn.disabled = true; btn.innerText = "Saving..."; stat.innerText = "";
       
       const formObj = {
         name: name,
@@ -138,12 +138,12 @@
       
       google.script.run
         .withSuccessHandler(() => {
-          stat.style.color = "#10B981"; stat.innerText = "✅ Berhasil disimpan!";
+          stat.style.color = "#10B981"; stat.innerText = "✅ Berhasil diSave!";
           setTimeout(() => google.script.host.close(), 1500);
         })
         .withFailureHandler(err => {
-          stat.style.color = "#EF4444"; stat.innerText = "❌ Gagal: " + err.message;
-          btn.disabled = false; btn.innerText = "Simpan Barang Baru";
+          stat.style.color = "#EF4444"; stat.innerText = "❌ Failed: " + err.message;
+          btn.disabled = false; btn.innerText = "Save New item";
         })
         .processOnboarding(formObj);
     }
@@ -181,7 +181,7 @@
       }
       
       function onExtractFail(err) {
-        stat.style.color = "#EF4444"; stat.innerText = "❌ Gagal: " + err.message;
+        stat.style.color = "#EF4444"; stat.innerText = "❌ Failed: " + err.message;
         btn.disabled = false; btn.innerText = "🔍 Ekstrak Data";
       }
     }
@@ -221,7 +221,7 @@
     
     function saveBulkData() {
       const rows = document.querySelectorAll("#previewBody tr");
-      if (rows.length === 0) return alert("Tidak ada data untuk disimpan.");
+      if (rows.length === 0) return alert("Tidak ada data untuk diSave.");
       
       const payload = [];
       rows.forEach(tr => {
@@ -236,7 +236,7 @@
       
       const btn = document.getElementById("saveBulkBtn");
       const stat = document.getElementById("status-bulk");
-      btn.disabled = true; btn.innerText = "⏳ Menyimpan..."; stat.innerText = "";
+      btn.disabled = true; btn.innerText = "⏳ Saving..."; stat.innerText = "";
       
       google.script.run
         .withSuccessHandler(() => {
@@ -244,8 +244,8 @@
           setTimeout(() => google.script.host.close(), 2000);
         })
         .withFailureHandler(err => {
-          stat.style.color = "#EF4444"; stat.innerText = "❌ Gagal: " + err.message;
-          btn.disabled = false; btn.innerText = "💾 Simpan Semua Data";
+          stat.style.color = "#EF4444"; stat.innerText = "❌ Failed: " + err.message;
+          btn.disabled = false; btn.innerText = "💾 Save Semua Data";
         })
         .processBulkOnboarding(payload);
     }

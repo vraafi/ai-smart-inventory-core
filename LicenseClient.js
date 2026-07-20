@@ -113,7 +113,7 @@ function promptLicenseActivation() {
   // Step 2: Ask for License Key
   var keyResult = ui.prompt(
     'Aktivasi Lisensi',
-    'Masukkan Kode Lisensi yang Anda terima dari penjual:\n(Contoh: INV-ABCD-EF12-GH34)',
+    'Masukkan Kode Lisensi yang Anda terima dari penjual:\n(Example: INV-ABCD-EF12-GH34)',
     ui.ButtonSet.OK_CANCEL
   );
   if (keyResult.getSelectedButton() !== ui.Button.OK) return;
@@ -140,7 +140,7 @@ function promptLicenseActivation() {
       response = UrlFetchApp.fetch(url, { muteHttpExceptions: true });
     } catch (fetchError) {
       props.deleteProperty("LICENSE_SERVER_URL");
-      ui.alert('Error Koneksi', 'Sistem gagal menghubungi server lisensi. Sepertinya URL Server yang Anda masukkan sebelumnya salah (Anda mungkin memasukkan Kode Lisensi ke kolom URL Server).\n\nSistem telah mereset pengaturan Anda. Silakan klik menu Aktivasi Lisensi lagi dan masukkan URL yang berawalan "https://script.google.com/..." di Langkah 1.', ui.ButtonSet.OK);
+      ui.alert('Error Koneksi', 'Sistem Failed Contacting server lisensi. Sepertinya URL Server yang Anda masukkan sebelumnya salah (Anda mungkin memasukkan Kode Lisensi ke kolom URL Server).\n\nSistem telah mereset Settings Anda. Silakan klik menu Aktivasi Lisensi lagi dan masukkan URL yang berawalan "https://script.google.com/..." di Langkah 1.', ui.ButtonSet.OK);
       return;
     }
     
@@ -152,7 +152,7 @@ function promptLicenseActivation() {
     } catch (parseError) {
       if (responseText.indexOf('<') !== -1) {
         props.deleteProperty("LICENSE_SERVER_URL");
-        ui.alert('Error URL Server', 'Sistem gagal menghubungi server lisensi. Ini karena URL Server yang dimasukkan sebelumnya salah, terpotong, atau kurang "/exec" di belakangnya.\n\nSistem telah mereset URL Anda. Silakan coba Aktivasi Lisensi lagi dari Langkah 1.', ui.ButtonSet.OK);
+        ui.alert('Error URL Server', 'Sistem Failed Contacting server lisensi. Ini karena URL Server yang dimasukkan sebelumnya salah, terpotong, atau kurang "/exec" di belakangnya.\n\nSistem telah mereset URL Anda. Silakan coba Aktivasi Lisensi lagi dari Langkah 1.', ui.ButtonSet.OK);
         return;
       } else {
         throw new Error("Invalid response from server.");
@@ -165,9 +165,9 @@ function promptLicenseActivation() {
       props.setProperty("LICENSE_CHECK_TIME", String(Date.now()));
       ui.alert('Berhasil!', 'Lisensi berhasil diaktivasi! Sekarang Anda bisa menggunakan seluruh fitur AI sistem ini.', ui.ButtonSet.OK);
     } else {
-      ui.alert('Gagal Aktivasi', result.message, ui.ButtonSet.OK);
+      ui.alert('Failed Aktivasi', result.message, ui.ButtonSet.OK);
     }
   } catch (e) {
-    ui.alert('Error', 'Tidak bisa menghubungi server lisensi: ' + e.message, ui.ButtonSet.OK);
+    ui.alert('Error', 'Tidak bisa Contacting server lisensi: ' + e.message, ui.ButtonSet.OK);
   }
 }
